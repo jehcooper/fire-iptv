@@ -52,6 +52,7 @@ import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.Renderer
 import androidx.media3.exoplayer.text.TextOutput
@@ -153,7 +154,10 @@ class PlayerActivity : ComponentActivity() {
         }
         player = ExoPlayer.Builder(this, renderers)
             .setMediaSourceFactory(
-                DefaultMediaSourceFactory(OkHttpDataSource.Factory(Net.http)).experimentalParseSubtitlesDuringExtraction(true),
+                // DefaultDataSource: streams go through OkHttp, but local files (downloaded subtitles) can be read too.
+                // Using OkHttp alone made downloaded subtitles fail with ERROR_CODE_FAILED_RUNTIME_CHECK.
+                DefaultMediaSourceFactory(DefaultDataSource.Factory(this, OkHttpDataSource.Factory(Net.http)))
+                    .experimentalParseSubtitlesDuringExtraction(true),
             )
             .build()
         player.addListener(object : Player.Listener {
@@ -168,12 +172,16 @@ class PlayerActivity : ComponentActivity() {
                 handleFailure(error.errorCodeName.removePrefix("ERROR_CODE_").lowercase().replace('_', ' ') +
                     if (detail.isNotBlank()) ": $detail" else "")
             }
-            override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) { paused = !playWhenReady }
+            override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+                paused = !playWhenReady
+                updateAwake()
+            }
             override fun onTracksChanged(tracks: Tracks) {
                 // First time a movie/episode's tracks are known: apply the subtitles-on/off preference.
                 if (!live && !subsInitDone && !tracks.isEmpty) { subsInitDone = true; autoSubtitles() }
             }
             override fun onPlaybackStateChanged(state: Int) {
+                updateAwake()
                 stallJob?.cancel()
                 if (state == Player.STATE_BUFFERING && live && !catchUp) {
                     // A live stream stuck buffering this long is treated as dead → try a backup copy.
@@ -351,6 +359,7 @@ class PlayerActivity : ComponentActivity() {
         flash("Loading subtitles…")
         val file = OpenSubtitles.download(this, r.fileId)
         externalSub = file
+        subsRecoveryTried = false
         val pos = player.currentPosition
         val wasPlaying = player.playWhenReady
         player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
@@ -508,8 +517,35 @@ class PlayerActivity : ComponentActivity() {
         toastJob = lifecycleScope.launch { delay(4_000); toast = null }
     }
 
+    // ---------- keep the screensaver away while playing ----------
+
+    private var wakeLock: android.os.PowerManager.WakeLock? = null
+
+    /**
+     * Screen stays on while something is playing or loading (including brief buffering, so the
+     * screensaver can't sneak in mid-stream). Paused or stopped: the normal screensaver rules apply.
+     */
+    private fun updateAwake() {
+        val state = player.playbackState
+        val awake = player.playWhenReady && state != Player.STATE_IDLE && state != Player.STATE_ENDED
+        if (awake) {
+            window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            if (wakeLock?.isHeld != true) {
+                val pm = getSystemService(POWER_SERVICE) as android.os.PowerManager
+                @Suppress("DEPRECATION")
+                wakeLock = pm.newWakeLock(
+                    android.os.PowerManager.SCREEN_BRIGHT_WAKE_LOCK or android.os.PowerManager.ON_AFTER_RELEASE, "sideline:playback",
+                ).apply { setReferenceCounted(false); acquire(6 * 3600_000L) }
+            }
+        } else {
+            window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            wakeLock?.let { if (it.isHeld) it.release() }
+        }
+    }
+
     override fun onPause() {
         super.onPause()
+        wakeLock?.let { if (it.isHeld) it.release() }
         if (!::player.isInitialized) return
         saveResume()
         player.pause()
