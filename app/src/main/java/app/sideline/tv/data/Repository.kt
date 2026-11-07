@@ -40,6 +40,14 @@ class Repository(private val prefs: Prefs) {
     /** Channels grouped by normalised name, for auto-failover. */
     private var twins: Map<String, List<Channel>> = emptyMap()
 
+    /** Pre-computed lowercase and normalised channel names, so game matching doesn't redo regex work. */
+    @Volatile var lowerNames: Map<String, String> = emptyMap(); private set
+    @Volatile var normNames: Map<String, String> = emptyMap(); private set
+    @Volatile private var byKey: Map<String, Channel> = emptyMap()
+
+    /** TV guide cache: one fetch per channel serves every game we check for 10 minutes. */
+    private val epgCache = java.util.concurrent.ConcurrentHashMap<String, Pair<Long, List<EpgItem>>>()
+
     val catchupAvailable: Boolean get() = channels.value.any { it.hasArchive }
 
     fun refresh() {
@@ -74,7 +82,11 @@ class Repository(private val prefs: Prefs) {
             val liveRes = live.awaitAll()
             liveCategories.value = liveRes.flatMap { it.first }
             channels.value = liveRes.flatMap { it.second }
-            twins = channels.value.groupBy { normalizeChannelName(it.name) }
+            val norm = channels.value.associate { it.key to normalizeChannelName(it.name) }
+            normNames = norm
+            lowerNames = channels.value.associate { it.key to it.name.lowercase() }
+            byKey = channels.value.associateBy { it.key }
+            twins = channels.value.groupBy { norm[it.key] ?: "" }
 
             val vodRes = vod.awaitAll()
             vodCategories.value = vodRes.flatMap { it.first }
@@ -86,7 +98,7 @@ class Repository(private val prefs: Prefs) {
         _loading.value = false
     }
 
-    fun channel(key: String): Channel? = channels.value.firstOrNull { it.key == key }
+    fun channel(key: String): Channel? = byKey[key] ?: channels.value.firstOrNull { it.key == key }
 
     fun channelsIn(cat: Category): List<Channel> =
         channels.value.filter { it.accountId == cat.accountId && it.categoryId == cat.id }
@@ -99,4 +111,12 @@ class Repository(private val prefs: Prefs) {
         liveCategories.value.firstOrNull { it.accountId == c.accountId && it.id == c.categoryId }?.name ?: ""
 
     suspend fun epg(c: Channel, limit: Int = 4): List<EpgItem> = client(c.accountId)?.shortEpg(c.streamId, limit) ?: emptyList()
+
+    suspend fun epgCached(c: Channel): List<EpgItem> {
+        val now = System.currentTimeMillis()
+        epgCache[c.key]?.let { (t, items) -> if (now - t < 10 * 60_000) return items }
+        val items = epg(c, 6)
+        epgCache[c.key] = now to items
+        return items
+    }
 }

@@ -29,6 +29,10 @@ class Prefs(context: Context) {
     private val _followed = MutableStateFlow(sp.getStringSet("followed", emptySet())!!.toSet())
     val followedGames: StateFlow<Set<String>> = _followed
 
+    /** Games pinned to the bottom of the screen while watching. */
+    private val _pinned = MutableStateFlow(sp.getStringSet("pinned", emptySet())!!.toSet())
+    val pinnedGames: StateFlow<Set<String>> = _pinned
+
     private val _favChannels = MutableStateFlow(sp.getStringSet("favChannels", emptySet())!!.toSet())
     val favChannels: StateFlow<Set<String>> = _favChannels
 
@@ -69,6 +73,7 @@ class Prefs(context: Context) {
     fun toggleConference(id: String) = toggle(_favConfs, "favConfs", id)
     fun toggleTeam(leagueId: String, teamId: String) = toggle(_favTeams, "favTeams", "$leagueId|$teamId")
     fun toggleFollow(eventId: String) = toggle(_followed, "followed", eventId)
+    fun togglePin(eventId: String) = toggle(_pinned, "pinned", eventId)
     fun toggleFavChannel(key: String) = toggle(_favChannels, "favChannels", key)
 
     fun setAutoFollowTeams(v: Boolean) { _autoFollowTeams.value = v; sp.edit().putBoolean("autoFollowTeams", v).apply() }
@@ -82,6 +87,8 @@ class Prefs(context: Context) {
 
     /** Drop followed games that have ended, so the list doesn't grow forever. */
     fun unfollowFinished(finished: Set<String>) {
+        val p = _pinned.value - finished
+        if (p.size != _pinned.value.size) { _pinned.value = p; sp.edit().putStringSet("pinned", p).apply() }
         val s = _followed.value - finished
         if (s.size != _followed.value.size) {
             _followed.value = s

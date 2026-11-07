@@ -197,12 +197,13 @@ fun PosterCard(
 
 /** Pop-up for followed games: slides in at the top-right, then gets out of the way. */
 @Composable
-fun ScorePopupHost(modifier: Modifier = Modifier) {
+fun ScorePopupHost(modifier: Modifier = Modifier, skipStarts: Boolean = false) {
     var current by remember { mutableStateOf<ScoreAlert?>(null) }
     var visible by remember { mutableStateOf(false) }
     val spoilerFree by SidelineApp.prefs.spoilerFree.collectAsState()
     LaunchedEffect(Unit) {
         SidelineApp.scores.alerts.collect { a ->
+            if (skipStarts && (a.kind == AlertKind.STARTED || a.kind == AlertKind.STARTING_SOON)) return@collect
             current = a
             visible = true
             delay(7000)

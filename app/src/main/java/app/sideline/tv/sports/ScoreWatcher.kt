@@ -48,7 +48,7 @@ class ScoreWatcher(private val prefs: Prefs) {
             while (true) {
                 refreshOnce()
                 // Faster polling while something the user cares about is live.
-                val anyLiveFollowed = _board.value.values.flatten().any { it.isLive && isWatched(it) }
+                val anyLiveFollowed = _board.value.values.flatten().any { it.isLive && (isWatched(it) || it.id in prefs.pinnedGames.value) }
                 delay(if (anyLiveFollowed) 20_000 else 60_000)
             }
         }
@@ -92,6 +92,14 @@ class ScoreWatcher(private val prefs: Prefs) {
             last[g.id] = g
         }
         if (finished.isNotEmpty()) prefs.unfollowFinished(finished)
+
+        // Pre-load "Take me to the game" for games you're most likely to open: yours first, then other live games.
+        val all = map.values.flatten().distinctBy { it.id }
+        val soon = System.currentTimeMillis() + 2 * 3600_000L
+        val pinned = prefs.pinnedGames.value
+        val priority = all.filter { (it.isLive || (it.state == "pre" && it.startMillis in 1..soon)) }
+            .sortedWith(compareBy({ !(isWatched(it) || it.id in pinned) }, { !it.isLive }, { it.startMillis }))
+        GameMatcher.prefetch(priority, app.sideline.tv.SidelineApp.repo)
     }
 
     private fun detect(prev: Game?, g: Game) {
@@ -103,7 +111,8 @@ class ScoreWatcher(private val prefs: Prefs) {
         when {
             prev.state == "pre" && g.state == "in" -> emit(g, AlertKind.STARTED, "Underway")
             prev.state != "post" && g.state == "post" -> emit(g, AlertKind.FINAL, "Final")
-            g.isLive && prev.scoreKey != g.scoreKey && g.isTeamGame -> {
+            // Basketball scores change every few seconds, so no score pop-ups there (start/final still show).
+            g.isLive && prev.scoreKey != g.scoreKey && g.isTeamGame && !isBasketball(g) -> {
                 val scorer = g.competitors.firstOrNull { c ->
                     val old = prev.competitors.firstOrNull { it.id == c.id }?.score
                     (c.score.toDoubleOrNull() ?: 0.0) > (old?.toDoubleOrNull() ?: 0.0)
@@ -112,6 +121,8 @@ class ScoreWatcher(private val prefs: Prefs) {
             }
         }
     }
+
+    private fun isBasketball(g: Game) = Leagues.byId(g.leagueId)?.path?.startsWith("basketball") == true
 
     private fun emit(g: Game, kind: AlertKind, headline: String) {
         _alerts.tryEmit(ScoreAlert(g, kind, headline))

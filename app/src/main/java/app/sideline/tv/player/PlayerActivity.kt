@@ -55,6 +55,22 @@ import app.sideline.tv.data.MovieInfoService
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import app.sideline.tv.data.Net
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import app.sideline.tv.sports.AlertKind
+import app.sideline.tv.sports.Game
+import app.sideline.tv.sports.GameMatcher
+import app.sideline.tv.sports.ScoreAlert
+import app.sideline.tv.ui.Chip
+import app.sideline.tv.ui.TvDialog
 import app.sideline.tv.ui.C
 import app.sideline.tv.ui.Pill
 import app.sideline.tv.ui.ScorePopupHost
@@ -66,7 +82,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
- * Live keys: ▲▼ change channel · ◀ jump back to the previous channel · OK shows info · ≡ watch from start (catch-up).
+ * Live keys: ▲▼ change channel · ◀ previous channel · OK shows info · ⏪ watch from start (catch-up) · ≡ games & pinned scores.
  * Movies/episodes: OK or Play pauses · ◀▶ skip 10s/30s · rewind/fast-forward keys work too.
  */
 @OptIn(UnstableApi::class)
@@ -89,6 +105,10 @@ class PlayerActivity : ComponentActivity() {
     private var duration by mutableLongStateOf(0L)
     private var vodKey: String? = null
     private var paused by mutableStateOf(false)
+    private var gamesPanel by mutableStateOf(false)
+    /** "Game starting" prompt: OK = watch it, Menu = pin the score. */
+    private var prompt by mutableStateOf<ScoreAlert?>(null)
+    private var promptJob: Job? = null
     private var details by mutableStateOf<MovieInfo?>(null)
     private val tried = mutableSetOf<String>()
     private var infoJob: Job? = null
@@ -125,7 +145,7 @@ class PlayerActivity : ComponentActivity() {
                 title = item.title
                 subtitle = item.subtitle
                 start(item.url)
-                val resume = getSharedPreferences("resume", MODE_PRIVATE).getLong(item.key, 0L)
+                val resume = if (item.fromStart) 0L else getSharedPreferences("resume", MODE_PRIVATE).getLong(item.key, 0L)
                 if (resume > 60_000) { player.seekTo(resume); flash("Resuming where you left off") }
                 // Details for the pause screen.
                 val mv = item.movie
@@ -134,6 +154,17 @@ class PlayerActivity : ComponentActivity() {
                 showInfoBriefly()
             }
             is Play.Item.CatchUp -> { current = item.channel; catchUp = true; title = item.title; start(item.url) }
+        }
+
+        // Games starting: offer to watch or pin, instead of a passive pop-up.
+        lifecycleScope.launch {
+            SidelineApp.scores.alerts.collect { a ->
+                if (a.kind == AlertKind.STARTED || a.kind == AlertKind.STARTING_SOON) {
+                    prompt = a
+                    promptJob?.cancel()
+                    promptJob = lifecycleScope.launch { delay(15_000); prompt = null }
+                }
+            }
         }
 
         setContent {
@@ -153,7 +184,10 @@ class PlayerActivity : ComponentActivity() {
                     InfoOverlay()
                     PauseOverlay()
                     ToastOverlay()
-                    ScorePopupHost()
+                    PinnedTicker()
+                    StartPrompt()
+                    ScorePopupHost(skipStarts = true)
+                    if (gamesPanel) GamesPanel()
                 }
             }
         }
@@ -226,11 +260,43 @@ class PlayerActivity : ComponentActivity() {
         flash("Watching from the start. Press Back to return to live.")
     }
 
+    /** Jump to the channel showing a game: best match from "Take me to the game". */
+    private fun watchGame(g: Game) {
+        lifecycleScope.launch {
+            val matches = GameMatcher.cached(g.id) ?: GameMatcher.quick(g, repo)
+            val top = matches.firstOrNull { it.strong } ?: matches.firstOrNull()
+            if (top == null) {
+                flash("Couldn't find a channel for ${g.title} yet")
+                GameMatcher.prefetch(listOf(g), repo)
+                return@launch
+            }
+            if (!live) saveResume()
+            vodKey = null
+            details = null
+            queue = matches.map { it.channel }
+            gamesPanel = false
+            tune(top.channel)
+            flash("Switched to ${top.channel.name}")
+        }
+    }
+
     // ---------- remote ----------
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (event.action != KeyEvent.ACTION_DOWN) return super.dispatchKeyEvent(event)
         val liveMode = live && !catchUp
+        prompt?.let { p ->
+            when (event.keyCode) {
+                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> { prompt = null; watchGame(p.game); return true }
+                KeyEvent.KEYCODE_MENU -> {
+                    prompt = null
+                    if (p.game.id !in prefs.pinnedGames.value) prefs.togglePin(p.game.id)
+                    flash("Pinned ${p.game.title}")
+                    return true
+                }
+                KeyEvent.KEYCODE_BACK -> { prompt = null; return true }
+            }
+        }
         when (event.keyCode) {
             KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_CHANNEL_UP -> if (liveMode) { zap(-1); return true }
             KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_CHANNEL_DOWN -> if (liveMode) { zap(1); return true }
@@ -242,14 +308,14 @@ class PlayerActivity : ComponentActivity() {
                 return true
             }
             KeyEvent.KEYCODE_DPAD_RIGHT -> { if (liveMode) showInfoBriefly() else seekBy(30_000); return true }
-            KeyEvent.KEYCODE_MEDIA_REWIND -> { if (!liveMode) seekBy(-10_000); return true }
+            KeyEvent.KEYCODE_MEDIA_REWIND -> { if (liveMode) watchFromStart() else seekBy(-10_000); return true }
             KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> { if (!liveMode) seekBy(30_000); return true }
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
                 if (liveMode) { showInfo = !showInfo; if (showInfo) showInfoBriefly() } else togglePause()
                 return true
             }
             KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, KeyEvent.KEYCODE_MEDIA_PLAY, KeyEvent.KEYCODE_MEDIA_PAUSE -> { togglePause(); return true }
-            KeyEvent.KEYCODE_MENU -> { if (liveMode) watchFromStart(); return true }
+            KeyEvent.KEYCODE_MENU -> { gamesPanel = true; return true }
             KeyEvent.KEYCODE_BACK -> {
                 if (catchUp && current != null && Play.pending is Play.Item.Live) { tune(current!!); return true }
             }
@@ -282,13 +348,17 @@ class PlayerActivity : ComponentActivity() {
     override fun onPause() {
         super.onPause()
         if (!::player.isInitialized) return
+        saveResume()
+        player.pause()
+    }
+
+    private fun saveResume() {
         vodKey?.let { k ->
             val pos = player.currentPosition
             val dur = player.duration
             val nearEnd = dur > 0 && pos > dur - 5 * 60_000
             getSharedPreferences("resume", MODE_PRIVATE).edit().putLong(k, if (nearEnd) 0L else pos).apply()
         }
-        player.pause()
     }
 
     override fun onResume() {
@@ -321,7 +391,7 @@ class PlayerActivity : ComponentActivity() {
                 Column(
                     Modifier.fillMaxWidth()
                         .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xE6000000), Color(0xF2000000))))
-                        .padding(start = 56.dp, end = 56.dp, top = 80.dp, bottom = 36.dp),
+                        .padding(start = 56.dp, end = 56.dp, top = 80.dp, bottom = if (prefs.pinnedGames.value.isEmpty()) 36.dp else 96.dp),
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         current?.logo?.let { if (live) AsyncImage(model = it, contentDescription = null, modifier = Modifier.size(width = 96.dp, height = 54.dp)) }
@@ -349,7 +419,8 @@ class PlayerActivity : ComponentActivity() {
                         Text(
                             buildString {
                                 append("▲▼ channels   ◀ previous channel")
-                                if (current?.hasArchive == true) append("   ≡ watch from start")
+                                if (current?.hasArchive == true) append("   ⏪ watch from start")
+                                append("   ≡ games & scores")
                             },
                             color = C.Faint, fontSize = 13.sp, modifier = Modifier.padding(top = 10.dp),
                         )
@@ -358,8 +429,113 @@ class PlayerActivity : ComponentActivity() {
                             ProgressBar(position.toFloat() / duration)
                             Text("${fmt(position)} / ${fmt(duration)}", color = C.Muted, fontSize = 15.sp)
                         }
-                        Text(if (player.playWhenReady) "OK pause   ◀ −10s   ▶ +30s" else "Paused · OK to resume",
+                        Text(if (player.playWhenReady) "OK pause   ◀ −10s   ▶ +30s   ≡ games & scores" else "Paused · OK to resume",
                             color = C.Faint, fontSize = 13.sp, modifier = Modifier.padding(top = 10.dp))
+                    }
+                }
+            }
+        }
+    }
+
+    /** Pinned games along the bottom, always visible while watching. */
+    @Composable
+    private fun PinnedTicker() {
+        val pinned by prefs.pinnedGames.collectAsState()
+        val board by SidelineApp.scores.board.collectAsState()
+        val spoilerFree by prefs.spoilerFree.collectAsState()
+        val games = board.values.flatten().distinctBy { it.id }.filter { it.id in pinned }
+        if (games.isEmpty()) return
+        Box(Modifier.fillMaxSize().padding(bottom = 20.dp), contentAlignment = Alignment.BottomCenter) {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                games.forEach { g ->
+                    Row(
+                        Modifier.clip(RoundedCornerShape(10.dp)).background(Color(0xE6131A22)).padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        if (g.isLive) { Box(Modifier.size(8.dp).clip(CircleShape).background(C.Live)); Spacer(Modifier.width(8.dp)) }
+                        if (g.competitors.size == 2) {
+                            g.competitors.sortedBy { it.home }.forEachIndexed { i, c ->
+                                if (i == 1) Text("–", color = C.Faint, fontSize = 16.sp, modifier = Modifier.padding(horizontal = 6.dp))
+                                AsyncImage(model = c.logo, contentDescription = null, modifier = Modifier.size(22.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text(c.abbr.ifBlank { c.shortName.take(10) }, color = C.Text, fontSize = 14.sp)
+                                if (g.state != "pre") {
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(if (spoilerFree) "•" else c.score, color = C.Text, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        } else {
+                            Text(g.title, color = C.Text, fontSize = 14.sp, maxLines = 1)
+                        }
+                        Spacer(Modifier.width(10.dp))
+                        Text(if (g.state == "pre" && g.startMillis > 0) timeOf(g.startMillis) else g.detail, color = C.Muted, fontSize = 12.sp, maxLines = 1)
+                    }
+                }
+            }
+        }
+    }
+
+    /** "Game starting" card: OK to switch to it, Menu to pin the score. */
+    @Composable
+    private fun StartPrompt() {
+        Box(Modifier.fillMaxSize().padding(28.dp), contentAlignment = Alignment.TopEnd) {
+            AnimatedVisibility(visible = prompt != null, enter = fadeIn(), exit = fadeOut()) {
+                val p = prompt ?: return@AnimatedVisibility
+                Column(
+                    Modifier.width(420.dp).clip(RoundedCornerShape(16.dp)).background(Color(0xF0131A22))
+                        .border(2.dp, C.Accent, RoundedCornerShape(16.dp)).padding(18.dp),
+                ) {
+                    Text(p.headline, color = C.Accent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 6.dp)) {
+                        p.game.competitors.sortedBy { it.home }.forEach { c ->
+                            AsyncImage(model = c.logo, contentDescription = null, modifier = Modifier.size(30.dp))
+                            Spacer(Modifier.width(6.dp))
+                        }
+                        Text(p.game.title, color = C.Text, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                    }
+                    Text("OK  watch it now     ≡  pin the score     Back  dismiss", color = C.Muted, fontSize = 13.sp, modifier = Modifier.padding(top = 10.dp))
+                }
+            }
+        }
+    }
+
+    /** Menu (≡): live and upcoming games — pin scores, turn on pop-ups, or jump to the game's channel. */
+    @Composable
+    private fun GamesPanel() {
+        val board by SidelineApp.scores.board.collectAsState()
+        val pinned by prefs.pinnedGames.collectAsState()
+        val followed by prefs.followedGames.collectAsState()
+        val first = remember { FocusRequester() }
+        val soon = System.currentTimeMillis() + 3 * 3600_000L
+        val games = board.values.flatten().distinctBy { it.id }
+            .filter { it.isLive || (it.state == "pre" && it.startMillis in 1..soon) || it.id in pinned }
+            .sortedWith(compareBy({ it.id !in pinned }, { !SidelineApp.scores.isWatched(it) }, { !it.isLive }, { it.startMillis }))
+        LaunchedEffect(Unit) { SidelineApp.scores.refreshNow(); delay(250); try { first.requestFocus() } catch (_: Exception) {} }
+
+        TvDialog({ gamesPanel = false }) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.CenterEnd) {
+                Column(Modifier.fillMaxHeight().width(620.dp).background(Color(0xF20B0F14)).padding(28.dp)) {
+                    Text("Games", color = C.Text, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                    Text("Live now and starting in the next 3 hours, in your leagues.", color = C.Muted, fontSize = 13.sp)
+                    Spacer(Modifier.height(12.dp))
+                    if (games.isEmpty()) Text("No live or upcoming games right now.", color = C.Muted)
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(14.dp), contentPadding = PaddingValues(bottom = 40.dp)) {
+                        itemsIndexed(games, key = { _, g -> g.id }) { i, g ->
+                            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(C.Surface).padding(14.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    if (g.isLive) { Pill("LIVE", C.Live, Color.White); Spacer(Modifier.width(8.dp)) }
+                                    Text(g.title, color = C.Text, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, modifier = Modifier.weight(1f))
+                                    if (g.state != "pre" && g.competitors.size == 2 && !prefs.spoilerFree.value)
+                                        Text(g.competitors.sortedBy { it.home }.joinToString(" – ") { it.score }, color = C.Text, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                                }
+                                Text(if (g.state == "pre" && g.startMillis > 0) "Starts ${timeOf(g.startMillis)}" else g.detail, color = C.Muted, fontSize = 13.sp)
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
+                                    Chip("▶ Watch", true, onClick = { watchGame(g) }, modifier = if (i == 0) Modifier.focusRequester(first) else Modifier)
+                                    Chip(if (g.id in pinned) "📌 Unpin" else "📌 Pin", g.id in pinned, onClick = { prefs.togglePin(g.id) })
+                                    Chip(if (g.id in followed) "🔔 On" else "🔕 Pop-ups", g.id in followed, onClick = { prefs.toggleFollow(g.id) })
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -400,7 +576,7 @@ class PlayerActivity : ComponentActivity() {
                             ProgressBar(position.toFloat() / duration)
                             Text("${fmt(position)} / ${fmt(duration)}   ·   ${fmt((duration - position).coerceAtLeast(0))} left", color = C.Muted, fontSize = 15.sp)
                         }
-                        Text("OK or Play to resume   ◀ −10s   ▶ +30s   Back to exit", color = C.Faint, fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp))
+                        Text("OK or Play to resume   ◀ −10s   ▶ +30s   ≡ games & scores   Back to exit", color = C.Faint, fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp))
                     }
                 }
             }

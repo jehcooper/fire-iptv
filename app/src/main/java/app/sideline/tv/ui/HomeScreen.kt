@@ -38,6 +38,8 @@ fun HomeScreen(goTo: (Tab) -> Unit) {
     val favCh by prefs.favChannels.collectAsState()
     val errors by repo.errors.collectAsState()
     var openGame by remember { mutableStateOf<Game?>(null) }
+    var openMovie by remember { mutableStateOf<app.sideline.tv.data.Movie?>(null) }
+    var openSeries by remember { mutableStateOf<app.sideline.tv.data.Series?>(null) }
 
     if (accounts.isEmpty()) {
         Column(Modifier.fillMaxSize()) {
@@ -96,7 +98,7 @@ fun HomeScreen(goTo: (Tab) -> Unit) {
             Column {
                 SectionTitle("Movies")
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    items(movies.takeLast(30).reversed(), key = { it.key }) { m -> PosterCard(m.name, m.poster, onClick = { Play.movie(ctx, m) }) }
+                    items(movies.takeLast(30).reversed(), key = { it.key }) { m -> PosterCard(m.name, m.poster, onClick = { openMovie = m }) }
                 }
             }
         }
@@ -105,7 +107,7 @@ fun HomeScreen(goTo: (Tab) -> Unit) {
                 SectionTitle("Series")
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     items(series.takeLast(30).reversed(), key = { "${it.accountId}:${it.seriesId}" }) { s ->
-                        PosterCard(s.name, s.cover, onClick = { goTo(Tab.Series) })
+                        PosterCard(s.name, s.cover, onClick = { openSeries = s })
                     }
                 }
             }
@@ -119,4 +121,6 @@ fun HomeScreen(goTo: (Tab) -> Unit) {
     }
 
     openGame?.let { g -> GameSheet(g, onDismiss = { openGame = null }) }
+    openMovie?.let { m -> MovieSheet(m) { openMovie = null } }
+    openSeries?.let { s -> SeriesSheet(s) { openSeries = null } }
 }

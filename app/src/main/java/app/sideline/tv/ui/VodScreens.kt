@@ -55,6 +55,7 @@ import kotlinx.coroutines.delay
 
 private const val ALL = "__all"
 private const val FIND = "__search"
+private const val EVERYTHING = "__everything"
 
 @Composable
 private fun <T> VodBrowser(
@@ -72,23 +73,28 @@ private fun <T> VodBrowser(
         EmptyState(emptyTitle, "Add an account with \"On-demand\" ticked in Settings, or wait for loading to finish.")
         return
     }
+    val counts = remember(all) { all.groupingBy { catOf(it) }.eachCount() }
+    val alphabetical = remember(all) { all.sortedBy { nameOf(it).lowercase() } }
     val shown = when (selected) {
         ALL -> all.takeLast(300).reversed()
+        EVERYTHING -> alphabetical
         FIND -> if (query.length < 2) emptyList() else all.filter { nameOf(it).contains(query, ignoreCase = true) }.take(300)
         else -> all.filter { catOf(it) == selected }
     }
     Row(Modifier.fillMaxSize().padding(start = 48.dp, end = 32.dp, top = 8.dp)) {
         LazyColumn(Modifier.width(280.dp), verticalArrangement = Arrangement.spacedBy(4.dp), contentPadding = PaddingValues(bottom = 60.dp)) {
             item { CategoryItem("🔍 Search", selected == FIND) { selected = FIND } }
+            item { CategoryItem("All A–Z  (${all.size})", selected == EVERYTHING) { selected = EVERYTHING } }
             item { CategoryItem("Recently added", selected == ALL) { selected = ALL } }
             items(cats, key = { "${it.accountId}:${it.id}" }) { c ->
-                CategoryItem(c.name, selected == "${c.accountId}:${c.id}") { selected = "${c.accountId}:${c.id}" }
+                val k = "${c.accountId}:${c.id}"
+                CategoryItem("${c.name}  (${counts[k] ?: 0})", selected == k) { selected = k }
             }
         }
         Spacer(Modifier.width(24.dp))
         Column(Modifier.weight(1f)) {
             if (selected == FIND) {
-                SearchBox(query, { query = it }, "Type a title")
+                SearchBox(query, { query = it }, "Search all titles in every category")
                 Spacer(Modifier.height(10.dp))
             }
             LazyVerticalGrid(
@@ -128,7 +134,7 @@ private fun DetailSheet(image: String?, onDismiss: () -> Unit, content: @Composa
 }
 
 @Composable
-private fun MovieSheet(m: Movie, onDismiss: () -> Unit) {
+fun MovieSheet(m: Movie, onDismiss: () -> Unit) {
     val ctx = LocalContext.current
     var info by remember { mutableStateOf<MovieInfo?>(null) }
     val play = remember { FocusRequester() }
@@ -156,11 +162,26 @@ private fun MovieSheet(m: Movie, onDismiss: () -> Unit) {
                     if (i.plotSource.isNotBlank()) Text(i.plotSource, color = C.Faint, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
                 }
                 Spacer(Modifier.height(22.dp))
-                Chip("▶ Play", selected = true, onClick = { Play.movie(ctx, m) }, modifier = Modifier.focusRequester(play))
-                Text("Picks up where you left off.", color = C.Faint, fontSize = 13.sp, modifier = Modifier.padding(top = 10.dp))
+                // Re-read when coming back from the player so the resume time is current.
+                var tick by remember { mutableStateOf(0) }
+                androidx.lifecycle.compose.LifecycleResumeEffect(m.key) { tick++; onPauseOrDispose { } }
+                val resumeAt = remember(m.key, tick) { Play.resumePosition(ctx, Play.movieKey(m)) }
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    if (resumeAt > 60_000) {
+                        Chip("▶ Resume from ${fmtTime(resumeAt)}", selected = true, onClick = { Play.movie(ctx, m) }, modifier = Modifier.focusRequester(play))
+                        Chip("⟲ Start from the beginning", selected = false, onClick = { Play.movie(ctx, m, fromStart = true) })
+                    } else {
+                        Chip("▶ Play", selected = true, onClick = { Play.movie(ctx, m, fromStart = true) }, modifier = Modifier.focusRequester(play))
+                    }
+                }
             }
         }
     }
+}
+
+fun fmtTime(ms: Long): String {
+    val s = ms / 1000
+    return if (s >= 3600) "%d:%02d:%02d".format(s / 3600, (s % 3600) / 60, s % 60) else "%d:%02d".format(s / 60, s % 60)
 }
 
 @Composable
@@ -177,7 +198,7 @@ fun SeriesScreen() {
 }
 
 @Composable
-private fun SeriesSheet(s: Series, onDismiss: () -> Unit) {
+fun SeriesSheet(s: Series, onDismiss: () -> Unit) {
     val ctx = LocalContext.current
     var episodes by remember { mutableStateOf<List<Episode>?>(null) }
     var season by remember { mutableStateOf(1) }

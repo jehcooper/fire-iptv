@@ -42,6 +42,7 @@ import androidx.compose.ui.unit.sp
 import app.sideline.tv.SidelineApp
 import app.sideline.tv.player.Play
 import app.sideline.tv.sports.ChannelMatch
+import app.sideline.tv.sports.MatchTier
 import app.sideline.tv.sports.Game
 import app.sideline.tv.sports.GameMatcher
 import app.sideline.tv.sports.Leagues
@@ -102,101 +103,120 @@ fun SportsScreen(goTo: (Tab) -> Unit) {
     openGame?.let { g -> GameSheet(g, onDismiss = { openGame = null }) }
 }
 
-/** Game details: follow for pop-ups, and "Take me to the game". */
+/** Live view of one game: updates as scores come in. */
+@Composable
+fun liveGame(game: Game): Game {
+    val board by SidelineApp.scores.board.collectAsState()
+    return remember(board, game.id) { board.values.flatten().firstOrNull { it.id == game.id } ?: game }
+}
+
+/** Channel matches for a game: instant results first, TV-guide results fill in without blocking. */
+@Composable
+fun rememberMatches(game: Game): List<ChannelMatch>? {
+    val updates by GameMatcher.updates.collectAsState()
+    var quick by remember(game.id) { mutableStateOf<List<ChannelMatch>?>(null) }
+    LaunchedEffect(game.id) {
+        if (GameMatcher.cached(game.id) == null) {
+            quick = GameMatcher.quick(game, SidelineApp.repo)
+            GameMatcher.prefetch(listOf(game), SidelineApp.repo)
+        }
+    }
+    return remember(updates, quick, game.id) { GameMatcher.cached(game.id) ?: quick }
+}
+
+@Composable
+fun MatchRow(m: ChannelMatch, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    FocusCard(onClick = onClick, modifier = modifier.fillMaxWidth(), scaleOnFocus = 1.02f) { _ ->
+        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            AsyncImage(model = m.channel.logo, contentDescription = null, modifier = Modifier.size(width = 64.dp, height = 36.dp))
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(m.channel.name, color = C.Text, fontSize = 16.sp, maxLines = 1)
+                Text(m.reason, color = C.Faint, fontSize = 12.sp, maxLines = 1)
+            }
+            Box(Modifier.clip(RoundedCornerShape(6.dp)).background(if (m.strong) C.Accent else C.Surface2).padding(6.dp)) {
+                Text(if (m.strong) "likely" else "maybe", color = if (m.strong) C.Bg else C.Muted, fontSize = 11.sp)
+            }
+        }
+    }
+}
+
+@Composable
+fun ScoreHeader(live: Game, spoilerFree: Boolean) {
+    Text(Leagues.byId(live.leagueId)?.name ?: "", color = C.Accent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+    Spacer(Modifier.height(8.dp))
+    if (live.competitors.size == 2) {
+        live.competitors.sortedBy { it.home }.forEach { c ->
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 6.dp)) {
+                AsyncImage(model = c.logo, contentDescription = null, modifier = Modifier.size(44.dp))
+                Spacer(Modifier.width(14.dp))
+                Text(c.name, color = C.Text, fontSize = 21.sp, modifier = Modifier.weight(1f), maxLines = 1)
+                if (live.state != "pre") Text(if (spoilerFree) "•" else c.score, color = C.Text, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+    } else {
+        Text(live.title, color = C.Text, fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
+    }
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 6.dp)) {
+        if (live.isLive) { Pill("LIVE", C.Live, Color.White); Spacer(Modifier.width(8.dp)) }
+        Text(
+            if (live.state == "pre" && live.startMillis > 0) "Starts ${dayTimeOf(live.startMillis)}" else live.detail,
+            color = C.Muted, fontSize = 15.sp,
+        )
+    }
+    if (live.broadcasts.isNotEmpty()) Text("On: ${live.broadcasts.joinToString(", ")}", color = C.Muted, fontSize = 14.sp)
+}
+
+/** Game details: channels showing it (pre-loaded), pop-ups and pin. */
 @Composable
 fun GameSheet(game: Game, onDismiss: () -> Unit) {
     val ctx = LocalContext.current
     val prefs = SidelineApp.prefs
     val followed by prefs.followedGames.collectAsState()
+    val pinned by prefs.pinnedGames.collectAsState()
     val spoilerFree by prefs.spoilerFree.collectAsState()
-    val scope = rememberCoroutineScope()
-    var searching by remember { mutableStateOf(false) }
-    var matches by remember { mutableStateOf<List<ChannelMatch>?>(null) }
+    val live = liveGame(game)
+    val matches = rememberMatches(game)
     val first = remember { FocusRequester() }
-    val live = SidelineApp.scores.game(game.id) ?: game
 
-    TvDialog(onDismiss) {
+    // Keep the clock and score fresh while this panel is open.
+    LaunchedEffect(game.id) {
+        while (true) { SidelineApp.scores.refreshNow(); delay(15_000) }
+    }
     LaunchedEffect(Unit) { delay(200); try { first.requestFocus() } catch (_: Exception) {} }
 
-    Box(Modifier.fillMaxSize().background(Color(0xCC000000)), contentAlignment = Alignment.CenterEnd) {
-        Column(
-            Modifier.fillMaxHeight().width(560.dp).background(C.Surface).padding(36.dp),
-        ) {
-            Text(Leagues.byId(live.leagueId)?.name ?: "", color = C.Accent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(8.dp))
-            if (live.competitors.size == 2) {
-                live.competitors.sortedBy { it.home }.forEach { c ->
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 6.dp)) {
-                        AsyncImage(model = c.logo, contentDescription = null, modifier = Modifier.size(48.dp))
-                        Spacer(Modifier.width(14.dp))
-                        Text(c.name, color = C.Text, fontSize = 22.sp, modifier = Modifier.weight(1f))
-                        if (live.state != "pre") Text(if (spoilerFree) "•" else c.score, color = C.Text, fontSize = 30.sp, fontWeight = FontWeight.Bold)
+    TvDialog(onDismiss) {
+        Box(Modifier.fillMaxSize().background(Color(0xCC000000)), contentAlignment = Alignment.CenterEnd) {
+            Column(Modifier.fillMaxHeight().width(600.dp).background(C.Surface).padding(36.dp)) {
+                ScoreHeader(live, spoilerFree)
+                Spacer(Modifier.height(16.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Chip(if (live.id in followed) "🔔 Pop-ups on" else "🔕 Pop-ups off", live.id in followed,
+                        onClick = { prefs.toggleFollow(live.id) }, modifier = Modifier.focusRequester(first))
+                    Chip(if (live.id in pinned) "📌 Pinned" else "📌 Pin score", live.id in pinned,
+                        onClick = { prefs.togglePin(live.id) })
+                }
+                Text("Pinned scores show along the bottom while you watch.", color = C.Faint, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
+                Spacer(Modifier.height(14.dp))
+                Text("Channels showing this game", color = C.Muted, fontSize = 13.sp)
+                Spacer(Modifier.height(6.dp))
+                when {
+                    matches == null -> Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(color = C.Accent, strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(10.dp))
+                        Text("Searching your channels…", color = C.Muted)
                     }
-                }
-            } else {
-                Text(live.title, color = C.Text, fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
-            }
-            Text(
-                if (live.state == "pre" && live.startMillis > 0) "Starts ${dayTimeOf(live.startMillis)}" else live.detail,
-                color = C.Muted, fontSize = 15.sp, modifier = Modifier.padding(top = 6.dp),
-            )
-            if (live.broadcasts.isNotEmpty()) Text("On: ${live.broadcasts.joinToString(", ")}", color = C.Muted, fontSize = 14.sp)
-            Spacer(Modifier.height(20.dp))
-
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Chip(
-                    "▶ Take me to the game", selected = true, modifier = Modifier.focusRequester(first),
-                    onClick = {
-                        if (!searching) {
-                            searching = true
-                            scope.launch {
-                                val m = GameMatcher.find(live, SidelineApp.repo)
-                                matches = m
-                                searching = false
-                                // Confident single answer → just go.
-                                val top = m.firstOrNull()
-                                if (top != null && top.score >= 100 && (m.getOrNull(1)?.score ?: 0) < top.score) {
-                                    Play.channel(ctx, top.channel, m.map { it.channel })
-                                }
-                            }
-                        }
-                    },
-                )
-                Chip(if (live.id in followed) "🔔 Pop-ups on" else "🔕 Pop-ups off", selected = live.id in followed,
-                    onClick = { prefs.toggleFollow(live.id) })
-            }
-            Spacer(Modifier.height(18.dp))
-
-            when {
-                searching -> Row(verticalAlignment = Alignment.CenterVertically) {
-                    CircularProgressIndicator(color = C.Accent, strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
-                    Spacer(Modifier.width(10.dp))
-                    Text("Checking your channels and TV guide…", color = C.Muted)
-                }
-                matches != null && matches!!.isEmpty() -> Text(
-                    "Couldn't find this game on your channels. Your provider's guide may not list it. Try the Live TV tab's sports categories.",
-                    color = C.Muted, fontSize = 15.sp,
-                )
-                matches != null -> LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    item { Text("Best matches", color = C.Muted, fontSize = 13.sp) }
-                    items(matches!!, key = { it.channel.key }) { m ->
-                        FocusCard(onClick = { Play.channel(ctx, m.channel, matches!!.map { it.channel }) }, modifier = Modifier.fillMaxWidth(), scaleOnFocus = 1.02f) { _ ->
-                            Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                AsyncImage(model = m.channel.logo, contentDescription = null, modifier = Modifier.size(width = 64.dp, height = 36.dp))
-                                Spacer(Modifier.width(12.dp))
-                                Column(Modifier.weight(1f)) {
-                                    Text(m.channel.name, color = C.Text, fontSize = 16.sp, maxLines = 1)
-                                    Text(m.reason, color = C.Faint, fontSize = 12.sp, maxLines = 2)
-                                }
-                                Box(Modifier.clip(RoundedCornerShape(6.dp)).background(if (m.score >= 100) C.Accent else C.Surface2).padding(6.dp)) {
-                                    Text(if (m.score >= 100) "likely" else "maybe", color = if (m.score >= 100) C.Bg else C.Muted, fontSize = 11.sp)
-                                }
-                            }
+                    matches.isEmpty() -> Text(
+                        "No channel found yet. Still checking the TV guide in the background; or try the Live TV tab's sports categories.",
+                        color = C.Muted, fontSize = 15.sp,
+                    )
+                    else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 40.dp)) {
+                        items(matches, key = { it.channel.key }) { m ->
+                            MatchRow(m, onClick = { Play.channel(ctx, m.channel, matches.map { it.channel }) })
                         }
                     }
                 }
             }
         }
-    }
     }
 }

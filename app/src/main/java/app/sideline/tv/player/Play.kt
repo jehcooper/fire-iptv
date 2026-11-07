@@ -17,6 +17,7 @@ object Play {
             val movie: Movie? = null,
             /** Set for episodes: their own description and still image. */
             val plot: String? = null, val image: String? = null,
+            val fromStart: Boolean = false,
         ) : Item()
         data class CatchUp(val channel: Channel, val title: String, val url: String) : Item()
     }
@@ -31,10 +32,15 @@ object Play {
     fun channel(ctx: Context, c: Channel, queue: List<Channel> = listOf(c)) =
         launch(ctx, Item.Live(c, queue.ifEmpty { listOf(c) }))
 
-    fun movie(ctx: Context, m: Movie) {
+    fun movie(ctx: Context, m: Movie, fromStart: Boolean = false) {
         val url = SidelineApp.repo.client(m.accountId)?.movieUrl(m) ?: return
-        launch(ctx, Item.Vod("movie:${m.key}", m.name, url, movie = m))
+        launch(ctx, Item.Vod(movieKey(m), m.name, url, movie = m, fromStart = fromStart))
     }
+
+    fun movieKey(m: Movie) = "movie:${m.key}"
+
+    /** Saved position (ms) for a movie or episode key, 0 if none. */
+    fun resumePosition(ctx: Context, key: String): Long = ctx.getSharedPreferences("resume", Context.MODE_PRIVATE).getLong(key, 0L)
 
     fun episode(ctx: Context, e: Episode, seriesName: String) {
         val url = SidelineApp.repo.client(e.accountId)?.episodeUrl(e) ?: return
