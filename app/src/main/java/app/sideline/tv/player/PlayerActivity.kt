@@ -38,6 +38,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.lifecycleScope
+import androidx.media3.common.C as MC
+import androidx.media3.common.Tracks
+import androidx.media3.common.TrackSelectionOverride
+import androidx.media3.ui.CaptionStyleCompat
+import androidx.media3.ui.SubtitleView
+import app.sideline.tv.data.OpenSubtitles
+import app.sideline.tv.ui.FocusCard
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
@@ -60,7 +67,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.items
+import app.sideline.tv.sports.Leagues
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.focus.FocusRequester
@@ -104,6 +112,12 @@ class PlayerActivity : ComponentActivity() {
     private var position by mutableLongStateOf(0L)
     private var duration by mutableLongStateOf(0L)
     private var vodKey: String? = null
+    private var vodItem: Play.Item.Vod? = null
+    private var vodUrl: String? = null
+    private var subsPanel by mutableStateOf(false)
+    private var subsInitDone = false
+    private var externalSub: java.io.File? = null
+    private var playerView: PlayerView? = null
     private var paused by mutableStateOf(false)
     private var gamesPanel by mutableStateOf(false)
     /** "Game starting" prompt: OK = watch it, Menu = pin the score. */
@@ -127,6 +141,10 @@ class PlayerActivity : ComponentActivity() {
         player.addListener(object : Player.Listener {
             override fun onPlayerError(error: PlaybackException) = handleFailure("error ${error.errorCodeName}")
             override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) { paused = !playWhenReady }
+            override fun onTracksChanged(tracks: Tracks) {
+                // First time a movie/episode's tracks are known: apply the subtitles-on/off preference.
+                if (!live && !subsInitDone && !tracks.isEmpty) { subsInitDone = true; autoSubtitles() }
+            }
             override fun onPlaybackStateChanged(state: Int) {
                 stallJob?.cancel()
                 if (state == Player.STATE_BUFFERING && live && !catchUp) {
@@ -140,6 +158,7 @@ class PlayerActivity : ComponentActivity() {
         when (item) {
             is Play.Item.Live -> { queue = item.queue; tune(item.channel) }
             is Play.Item.Vod -> {
+                vodItem = item
                 live = false
                 vodKey = item.key
                 title = item.title
@@ -174,6 +193,13 @@ class PlayerActivity : ComponentActivity() {
                         factory = { ctx ->
                             PlayerView(ctx).apply {
                                 useController = false
+                                playerView = this
+                                // Readable TV subtitles: white text on a soft dark box, a little larger than default.
+                                subtitleView?.setStyle(
+                                    CaptionStyleCompat(android.graphics.Color.WHITE, 0x99000000.toInt(), android.graphics.Color.TRANSPARENT,
+                                        CaptionStyleCompat.EDGE_TYPE_NONE, android.graphics.Color.WHITE, null),
+                                )
+                                subtitleView?.setFractionalTextSize(SubtitleView.DEFAULT_TEXT_SIZE_FRACTION * 1.15f)
                                 keepScreenOn = true
                                 player = this@PlayerActivity.player
                             }
@@ -188,6 +214,7 @@ class PlayerActivity : ComponentActivity() {
                     StartPrompt()
                     ScorePopupHost(skipStarts = true)
                     if (gamesPanel) GamesPanel()
+                    if (subsPanel) SubtitlesPanel()
                 }
             }
         }
@@ -195,12 +222,105 @@ class PlayerActivity : ComponentActivity() {
 
     // ---------- playback ----------
 
-    private fun start(url: String) {
+    private fun start(url: String, subtitle: java.io.File? = null, positionMs: Long = 0L) {
         val b = MediaItem.Builder().setUri(url)
         if (url.contains(".m3u8")) b.setMimeType(MimeTypes.APPLICATION_M3U8)
-        player.setMediaItem(b.build())
+        if (subtitle != null) {
+            b.setSubtitleConfigurations(listOf(
+                MediaItem.SubtitleConfiguration.Builder(android.net.Uri.fromFile(subtitle))
+                    .setMimeType(MimeTypes.APPLICATION_SUBRIP)
+                    .setLanguage(prefs.subsLang.value)
+                    .setLabel("OpenSubtitles")
+                    .setSelectionFlags(MC.SELECTION_FLAG_DEFAULT)
+                    .build(),
+            ))
+        }
+        if (!live) vodUrl = url
+        if (positionMs > 0) player.setMediaItem(b.build(), positionMs) else player.setMediaItem(b.build())
         player.prepare()
         player.playWhenReady = true
+    }
+
+    // ---------- subtitles ----------
+
+    private data class TextTrack(val group: Tracks.Group, val label: String, val language: String?)
+
+    private fun textTracks(): List<TextTrack> = player.currentTracks.groups
+        .filter { it.type == MC.TRACK_TYPE_TEXT && it.length > 0 }
+        .map { g ->
+            val f = g.getTrackFormat(0)
+            val lang = f.language
+            val name = f.label ?: lang?.let { java.util.Locale(it).displayLanguage.ifBlank { it } } ?: "Unknown"
+            TextTrack(g, name, lang)
+        }
+
+    private fun subtitlesOff() {
+        player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+            .setTrackTypeDisabled(MC.TRACK_TYPE_TEXT, true).build()
+    }
+
+    private fun selectTrack(t: TextTrack) {
+        player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+            .setTrackTypeDisabled(MC.TRACK_TYPE_TEXT, false)
+            .setOverrideForType(TrackSelectionOverride(t.group.mediaTrackGroup, 0))
+            .build()
+    }
+
+    private fun langMatches(trackLang: String?, wanted: String): Boolean {
+        if (trackLang == null) return false
+        val a = trackLang.lowercase().take(2)
+        val b = wanted.lowercase().take(2)
+        if (a == b) return true
+        // Files often tag tracks with 3-letter codes ("eng", "fre"); compare those too.
+        return try { java.util.Locale(wanted).isO3Language.equals(trackLang, ignoreCase = true) } catch (_: Exception) { false }
+    }
+
+    /** Subtitles on: prefer a built-in track in your language, else fetch one from OpenSubtitles. Off: hide them. */
+    private fun autoSubtitles() {
+        if (!prefs.subsOn.value) { subtitlesOff(); return }
+        val lang = prefs.subsLang.value
+        val tracks = textTracks()
+        val match = tracks.firstOrNull { langMatches(it.language, lang) }
+        when {
+            match != null -> selectTrack(match)
+            OpenSubtitles.configured && externalSub == null -> lifecycleScope.launch {
+                try {
+                    val results = searchSubs()
+                    val best = results.firstOrNull { !it.hearingImpaired } ?: results.firstOrNull()
+                    if (best == null) flash("No ${langName(lang)} subtitles found online") else attachOnline(best)
+                } catch (e: Exception) { flash(e.message ?: "Couldn't get subtitles") }
+            }
+            tracks.isNotEmpty() -> { selectTrack(tracks.first()); flash("No ${langName(lang)} subtitles in this file. Showing ${tracks.first().label}") }
+            else -> flash("No subtitles in this file. Add an OpenSubtitles key in Settings to fetch them online")
+        }
+    }
+
+    private fun langName(code: String) = java.util.Locale(code).displayLanguage.ifBlank { code }
+
+    private suspend fun searchSubs(): List<OpenSubtitles.Result> {
+        val item = vodItem ?: return emptyList()
+        val d = details
+        val (clean, yearHint) = MovieInfoService.cleanTitle(item.title)
+        val title = if (item.season != null) clean else (d?.title?.takeIf { it.isNotBlank() } ?: clean)
+        val year = if (item.season != null) null else (d?.year?.takeIf { it.isNotBlank() } ?: yearHint)
+        return OpenSubtitles.search(title, year, item.season, item.episode, prefs.subsLang.value)
+    }
+
+    private suspend fun attachOnline(r: OpenSubtitles.Result) {
+        val url = vodUrl ?: return
+        flash("Loading subtitles…")
+        val file = OpenSubtitles.download(this, r.fileId)
+        externalSub = file
+        val pos = player.currentPosition
+        val wasPlaying = player.playWhenReady
+        player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+            .setTrackTypeDisabled(MC.TRACK_TYPE_TEXT, false)
+            .clearOverridesOfType(MC.TRACK_TYPE_TEXT)
+            .setPreferredTextLanguage(prefs.subsLang.value)
+            .build()
+        start(url, file, pos)
+        player.playWhenReady = wasPlaying
+        flash("Subtitles on")
     }
 
     private fun tune(c: Channel, failover: Boolean = false) {
@@ -298,7 +418,10 @@ class PlayerActivity : ComponentActivity() {
             }
         }
         when (event.keyCode) {
-            KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_CHANNEL_UP -> if (liveMode) { zap(-1); return true }
+            KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_CHANNEL_UP -> {
+                if (liveMode) zap(-1) else if (!live) subsPanel = true
+                return true
+            }
             KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_CHANNEL_DOWN -> if (liveMode) { zap(1); return true }
             KeyEvent.KEYCODE_DPAD_LEFT -> {
                 if (liveMode) {
@@ -429,7 +552,7 @@ class PlayerActivity : ComponentActivity() {
                             ProgressBar(position.toFloat() / duration)
                             Text("${fmt(position)} / ${fmt(duration)}", color = C.Muted, fontSize = 15.sp)
                         }
-                        Text(if (player.playWhenReady) "OK pause   ◀ −10s   ▶ +30s   ≡ games & scores" else "Paused · OK to resume",
+                        Text(if (player.playWhenReady) "OK pause   ◀ −10s   ▶ +30s   ▲ subtitles   ≡ games & scores" else "Paused · OK to resume",
                             color = C.Faint, fontSize = 13.sp, modifier = Modifier.padding(top = 10.dp))
                     }
                 }
@@ -519,25 +642,116 @@ class PlayerActivity : ComponentActivity() {
                     Text("Live now and starting in the next 3 hours, in your leagues.", color = C.Muted, fontSize = 13.sp)
                     Spacer(Modifier.height(12.dp))
                     if (games.isEmpty()) Text("No live or upcoming games right now.", color = C.Muted)
-                    LazyColumn(verticalArrangement = Arrangement.spacedBy(14.dp), contentPadding = PaddingValues(bottom = 40.dp)) {
-                        itemsIndexed(games, key = { _, g -> g.id }) { i, g ->
-                            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(C.Surface).padding(14.dp)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    if (g.isLive) { Pill("LIVE", C.Live, Color.White); Spacer(Modifier.width(8.dp)) }
-                                    Text(g.title, color = C.Text, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, modifier = Modifier.weight(1f))
-                                    if (g.state != "pre" && g.competitors.size == 2 && !prefs.spoilerFree.value)
-                                        Text(g.competitors.sortedBy { it.home }.joinToString(" – ") { it.score }, color = C.Text, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                                }
-                                Text(if (g.state == "pre" && g.startMillis > 0) "Starts ${timeOf(g.startMillis)}" else g.detail, color = C.Muted, fontSize = 13.sp)
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
-                                    Chip("▶ Watch", true, onClick = { watchGame(g) }, modifier = if (i == 0) Modifier.focusRequester(first) else Modifier)
-                                    Chip(if (g.id in pinned) "📌 Unpin" else "📌 Pin", g.id in pinned, onClick = { prefs.togglePin(g.id) })
-                                    Chip(if (g.id in followed) "🔔 On" else "🔕 Pop-ups", g.id in followed, onClick = { prefs.toggleFollow(g.id) })
-                                }
+                    // Your teams & pinned games first, then everything else grouped by league.
+                    val mine = games.filter { it.id in pinned || SidelineApp.scores.isWatched(it) }
+                    val rest = games.filter { it !in mine }
+                    val leagueOrder = (Leagues.all.map { it.id } + rest.map { it.leagueId }).distinct()
+                    val sections = buildList {
+                        if (mine.isNotEmpty()) add("★ Your teams & pinned" to mine)
+                        rest.groupBy { it.leagueId }.entries.sortedBy { leagueOrder.indexOf(it.key) }
+                            .forEach { (lid, list) -> add((Leagues.byId(lid)?.name ?: lid) to list) }
+                    }
+                    val firstId = sections.firstOrNull()?.second?.firstOrNull()?.id
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 40.dp)) {
+                        sections.forEach { (heading, list) ->
+                            item(key = "h-$heading") {
+                                Text("$heading  (${list.size})", color = C.Accent, fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier.padding(top = 8.dp))
+                            }
+                            items(list, key = { "$heading-${it.id}" }) { g ->
+                                GameRow(g, pinned, followed, if (g.id == firstId) Modifier.focusRequester(first) else Modifier)
                             }
                         }
                     }
                 }
+            }
+        }
+    }
+
+    /** ▲ during a movie/episode: Off, built-in tracks, or search OpenSubtitles. */
+    @Composable
+    private fun SubtitlesPanel() {
+        val lang by prefs.subsLang.collectAsState()
+        var tracks by remember { mutableStateOf(textTracks()) }
+        var results by remember { mutableStateOf<List<OpenSubtitles.Result>?>(null) }
+        var status by remember { mutableStateOf("") }
+        var busy by remember { mutableStateOf(false) }
+        val first = remember { FocusRequester() }
+        val scope = androidx.compose.runtime.rememberCoroutineScope()
+        val textOn = !player.trackSelectionParameters.disabledTrackTypes.contains(MC.TRACK_TYPE_TEXT)
+        LaunchedEffect(Unit) { delay(250); try { first.requestFocus() } catch (_: Exception) {} }
+        TvDialog({ subsPanel = false }) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.CenterEnd) {
+                Column(Modifier.fillMaxHeight().width(560.dp).background(Color(0xF20B0F14)).padding(28.dp)) {
+                    Text("Subtitles", color = C.Text, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(12.dp))
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 40.dp)) {
+                        item {
+                            Chip(if (!textOn) "✓ Off" else "Off", !textOn, modifier = Modifier.focusRequester(first), onClick = {
+                                subtitlesOff(); subsPanel = false
+                            })
+                        }
+                        if (tracks.isNotEmpty()) item { Text("In this file", color = C.Muted, fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp)) }
+                        items(tracks, key = { it.group.mediaTrackGroup.id + it.label }) { t ->
+                            val on = textOn && t.group.isSelected
+                            Chip(if (on) "✓ ${t.label}" else t.label, on, onClick = { selectTrack(t); subsPanel = false })
+                        }
+                        item {
+                            Text("Online (OpenSubtitles, ${langName(lang)})", color = C.Muted, fontSize = 13.sp, modifier = Modifier.padding(top = 12.dp))
+                        }
+                        if (!OpenSubtitles.configured) item {
+                            Text("Add your free OpenSubtitles key in Settings → Subtitles to search online.", color = C.Faint, fontSize = 14.sp)
+                        } else if (results == null) item {
+                            Chip(if (busy) "Searching…" else "🔍 Find subtitles online", false, onClick = {
+                                if (busy) return@Chip
+                                busy = true; status = ""
+                                scope.launch {
+                                    try { results = searchSubs(); if (results!!.isEmpty()) status = "Nothing found for this title." }
+                                    catch (e: Exception) { status = e.message ?: "Search failed" }
+                                    busy = false
+                                }
+                            })
+                        } else {
+                            items(results!!.take(15), key = { it.fileId }) { r ->
+                                FocusCard(onClick = {
+                                    if (busy) return@FocusCard
+                                    busy = true; status = "Downloading…"
+                                    scope.launch {
+                                        try { attachOnline(r); subsPanel = false }
+                                        catch (e: Exception) { status = e.message ?: "Download failed" }
+                                        busy = false
+                                    }
+                                }, modifier = Modifier.fillMaxWidth(), scaleOnFocus = 1.02f) { _ ->
+                                    Column(Modifier.padding(12.dp)) {
+                                        Text(r.release, color = C.Text, fontSize = 14.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                        Text("${r.downloads} downloads" + if (r.hearingImpaired) " · for hard of hearing" else "", color = C.Faint, fontSize = 12.sp)
+                                    }
+                                }
+                            }
+                        }
+                        if (status.isNotBlank()) item { Text(status, color = C.Gold, fontSize = 14.sp, modifier = Modifier.padding(top = 8.dp)) }
+                    }
+                }
+            }
+        }
+        // Tracks can change after an online subtitle is attached.
+        LaunchedEffect(player.currentTracks) { tracks = textTracks() }
+    }
+
+    @Composable
+    private fun GameRow(g: Game, pinned: Set<String>, followed: Set<String>, watchModifier: Modifier) {
+        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(C.Surface).padding(14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (g.isLive) { Pill("LIVE", C.Live, Color.White); Spacer(Modifier.width(8.dp)) }
+                Text(g.title, color = C.Text, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, modifier = Modifier.weight(1f))
+                if (g.state != "pre" && g.competitors.size == 2 && !prefs.spoilerFree.value)
+                    Text(g.competitors.sortedBy { it.home }.joinToString(" – ") { it.score }, color = C.Text, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            }
+            Text(if (g.state == "pre" && g.startMillis > 0) "Starts ${timeOf(g.startMillis)}" else g.detail, color = C.Muted, fontSize = 13.sp)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
+                Chip("▶ Watch", true, onClick = { watchGame(g) }, modifier = watchModifier)
+                Chip(if (g.id in pinned) "📌 Unpin" else "📌 Pin", g.id in pinned, onClick = { prefs.togglePin(g.id) })
+                Chip(if (g.id in followed) "🔔 On" else "🔕 Pop-ups", g.id in followed, onClick = { prefs.toggleFollow(g.id) })
             }
         }
     }
@@ -576,7 +790,7 @@ class PlayerActivity : ComponentActivity() {
                             ProgressBar(position.toFloat() / duration)
                             Text("${fmt(position)} / ${fmt(duration)}   ·   ${fmt((duration - position).coerceAtLeast(0))} left", color = C.Muted, fontSize = 15.sp)
                         }
-                        Text("OK or Play to resume   ◀ −10s   ▶ +30s   ≡ games & scores   Back to exit", color = C.Faint, fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp))
+                        Text("OK or Play to resume   ◀ −10s   ▶ +30s   ▲ subtitles   ≡ games & scores   Back to exit", color = C.Faint, fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp))
                     }
                 }
             }

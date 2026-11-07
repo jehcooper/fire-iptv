@@ -206,7 +206,7 @@ fun ScorePopupHost(modifier: Modifier = Modifier, skipStarts: Boolean = false) {
             if (skipStarts && (a.kind == AlertKind.STARTED || a.kind == AlertKind.STARTING_SOON)) return@collect
             current = a
             visible = true
-            delay(7000)
+            delay(if (a.synopsis.isNotBlank()) 9000 else 7000)
             visible = false
             delay(400)
         }
@@ -240,6 +240,10 @@ fun ScorePopupHost(modifier: Modifier = Modifier, skipStarts: Boolean = false) {
                         }
                     } else {
                         Text(g.title, color = C.Text, fontSize = 16.sp)
+                    }
+                    if (a.synopsis.isNotBlank() && !spoilerFree) {
+                        Text(a.synopsis, color = C.Text, fontSize = 14.sp, maxLines = 3, overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(top = 6.dp).width(380.dp))
                     }
                     Text(g.detail, color = C.Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
                 }

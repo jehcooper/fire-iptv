@@ -85,14 +85,25 @@ fun SportsScreen(goTo: (Tab) -> Unit) {
             EmptyState("No games right now", if (board.isEmpty()) "Loading scores…" else "Nothing scheduled today in these leagues.")
             return@Column
         }
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(22.dp), contentPadding = PaddingValues(bottom = 60.dp, top = 8.dp)) {
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 60.dp, top = 8.dp)) {
+            // Each section (Live / Coming up / Final) is split into one row per league.
+            val order = leagues.map { it.id }
             listOf("Live" to live, "Coming up" to upcoming, "Final" to finals).forEach { (title, list) ->
-                if (list.isNotEmpty()) item(key = title) {
-                    Column {
-                        SectionTitle("$title · ${list.size}")
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(vertical = 8.dp)) {
-                            items(list, key = { it.id }) { g ->
-                                GameCard(g, g.id in followed, spoilerFree, onClick = { openGame = g }, onMenu = { prefs.toggleFollow(g.id) })
+                if (list.isNotEmpty()) {
+                    item(key = "h-$title") {
+                        Text("$title · ${list.size}", color = if (title == "Live") C.Live else C.Text, fontSize = 22.sp,
+                            fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 6.dp))
+                    }
+                    list.groupBy { it.leagueId }.entries.sortedBy { order.indexOf(it.key).let { i -> if (i < 0) 999 else i } }.forEach { (lid, games) ->
+                        item(key = "$title-$lid") {
+                            Column {
+                                Text("${Leagues.byId(lid)?.name ?: lid}  (${games.size})", color = C.Accent, fontSize = 16.sp,
+                                    fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 4.dp))
+                                LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(vertical = 8.dp)) {
+                                    items(games, key = { it.id }) { g ->
+                                        GameCard(g, g.id in followed, spoilerFree, onClick = { openGame = g }, onMenu = { prefs.toggleFollow(g.id) })
+                                    }
+                                }
                             }
                         }
                     }

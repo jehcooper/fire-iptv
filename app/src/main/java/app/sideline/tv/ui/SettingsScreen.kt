@@ -67,6 +67,11 @@ fun SettingsScreen() {
     val confs by SidelineApp.scores.conferences.collectAsState()
     val favConfs by prefs.favConferences.collectAsState()
     LaunchedEffect(Unit) { SidelineApp.scores.loadConferences() }
+    val subsOn by prefs.subsOn.collectAsState()
+    val subsLang by prefs.subsLang.collectAsState()
+    val osKey by prefs.osKey.collectAsState()
+    val osUser by prefs.osUser.collectAsState()
+    var editOs by remember { mutableStateOf(false) }
 
     LazyColumn(
         contentPadding = PaddingValues(start = 48.dp, end = 48.dp, top = 16.dp, bottom = 80.dp),
@@ -156,6 +161,30 @@ fun SettingsScreen() {
 
         item {
             Column {
+                SectionTitle("Subtitles (movies & series)")
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Chip(if (subsOn) "✓ Subtitles on" else "Subtitles off", subsOn, onClick = { prefs.setSubsOn(!subsOn) })
+                }
+                Text("Language:", color = C.Muted, fontSize = 14.sp, modifier = Modifier.padding(top = 10.dp))
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(vertical = 6.dp)) {
+                    items(listOf("en" to "English", "fr" to "French", "es" to "Spanish", "hi" to "Hindi", "de" to "German", "pt-br" to "Portuguese", "ar" to "Arabic")) { (code, name) ->
+                        Chip(name, subsLang == code, onClick = { prefs.setSubsLang(code) })
+                    }
+                }
+                Text(
+                    "Subtitles built into the video are used first. If there are none, they're fetched from OpenSubtitles.com, " +
+                        "which needs a free API key (5 downloads a day; 20 with a free account). " +
+                        "While watching, press ▲ to switch subtitles on/off or pick another.",
+                    color = C.Faint, fontSize = 13.sp, modifier = Modifier.padding(top = 6.dp),
+                )
+                Spacer(Modifier.height(8.dp))
+                Chip(if (osKey.isBlank()) "Add OpenSubtitles key" else "OpenSubtitles: key saved${if (osUser.isNotBlank()) " · $osUser" else ""}", false,
+                    onClick = { editOs = true })
+            }
+        }
+
+        item {
+            Column {
                 SectionTitle("About")
                 val catchup = when {
                     channels.isEmpty() -> "Not checked yet (no channels loaded)"
@@ -172,6 +201,7 @@ fun SettingsScreen() {
 
     editing?.let { a -> AccountEditor(a, isNew = accounts.none { it.id == a.id }, onDone = { editing = null }) }
     teamsFor?.let { id -> TeamPicker(id) { teamsFor = null } }
+    if (editOs) OpenSubtitlesEditor { editOs = false }
 }
 
 @Composable
@@ -311,5 +341,38 @@ private fun TeamPicker(leagueId: String, onDone: () -> Unit) {
             }
         }
     }
+    }
+}
+
+@Composable
+private fun OpenSubtitlesEditor(onDone: () -> Unit) {
+    val prefs = SidelineApp.prefs
+    var key by remember { mutableStateOf(prefs.osKey.value) }
+    var user by remember { mutableStateOf(prefs.osUser.value) }
+    var pass by remember { mutableStateOf(prefs.osPass.value) }
+    val firstField = remember { FocusRequester() }
+    LaunchedEffect(Unit) { delay(200); try { firstField.requestFocus() } catch (_: Exception) {} }
+    TvDialog(onDone) {
+        Box(Modifier.fillMaxSize().background(C.Bg.copy(alpha = 0.96f)), contentAlignment = Alignment.Center) {
+            LazyColumn(
+                Modifier.width(720.dp).clip(RoundedCornerShape(18.dp)).background(C.Surface),
+                contentPadding = PaddingValues(32.dp), verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                item { Text("OpenSubtitles", color = C.Text, fontSize = 24.sp, fontWeight = FontWeight.Bold) }
+                item {
+                    Text("Get a free key: sign up at opensubtitles.com, then open your profile → API consumers → New consumer, and copy the API key.",
+                        color = C.Muted, fontSize = 14.sp)
+                }
+                item { Field("API key (required)", key, { key = it.trim() }, modifier = Modifier.focusRequester(firstField)) }
+                item { Field("Username (optional, raises the daily limit to 20)", user, { user = it.trim() }) }
+                item { Field("Password (optional)", pass, { pass = it }, secret = true) }
+                item {
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Chip("Save", true, onClick = { prefs.setOpenSubtitles(key, user, pass); onDone() })
+                        Chip("Cancel", false, onClick = onDone)
+                    }
+                }
+            }
+        }
     }
 }

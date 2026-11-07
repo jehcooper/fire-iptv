@@ -18,6 +18,8 @@ object Play {
             /** Set for episodes: their own description and still image. */
             val plot: String? = null, val image: String? = null,
             val fromStart: Boolean = false,
+            /** For subtitle search: series name + season/episode for episodes. */
+            val season: Int? = null, val episode: Int? = null,
         ) : Item()
         data class CatchUp(val channel: Channel, val title: String, val url: String) : Item()
     }
@@ -44,6 +46,6 @@ object Play {
 
     fun episode(ctx: Context, e: Episode, seriesName: String) {
         val url = SidelineApp.repo.client(e.accountId)?.episodeUrl(e) ?: return
-        launch(ctx, Item.Vod("ep:${e.accountId}:${e.id}", seriesName, url, "S${e.season} E${e.number} · ${e.title}", plot = e.plot, image = e.image))
+        launch(ctx, Item.Vod("ep:${e.accountId}:${e.id}", seriesName, url, "S${e.season} E${e.number} · ${e.title}", plot = e.plot, image = e.image, season = e.season, episode = e.number))
     }
 }

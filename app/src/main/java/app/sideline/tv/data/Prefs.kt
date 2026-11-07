@@ -42,6 +42,27 @@ class Prefs(context: Context) {
     private val _spoilerFree = MutableStateFlow(sp.getBoolean("spoilerFree", false))
     val spoilerFree: StateFlow<Boolean> = _spoilerFree
 
+    // ---- Subtitles ----
+    private fun str(key: String, def: String) = MutableStateFlow(sp.getString(key, def) ?: def)
+    private val _subsOn = MutableStateFlow(sp.getBoolean("subsOn", false))
+    /** Subtitles on by default for movies & series. */
+    val subsOn: StateFlow<Boolean> = _subsOn
+    private val _subsLang = str("subsLang", "en")
+    val subsLang: StateFlow<String> = _subsLang
+    private val _osKey = str("osKey", "")
+    val osKey: StateFlow<String> = _osKey
+    private val _osUser = str("osUser", "")
+    val osUser: StateFlow<String> = _osUser
+    private val _osPass = str("osPass", "")
+    val osPass: StateFlow<String> = _osPass
+
+    fun setSubsOn(v: Boolean) { _subsOn.value = v; sp.edit().putBoolean("subsOn", v).apply() }
+    fun setSubsLang(v: String) { _subsLang.value = v; sp.edit().putString("subsLang", v).apply() }
+    fun setOpenSubtitles(key: String, user: String, pass: String) {
+        _osKey.value = key.trim(); _osUser.value = user.trim(); _osPass.value = pass
+        sp.edit().putString("osKey", key.trim()).putString("osUser", user.trim()).putString("osPass", pass).apply()
+    }
+
     /** Most recent first, channel keys. */
     private val _recent = MutableStateFlow(sp.getString("recent", "")!!.split(",").filter { it.isNotBlank() })
     val recentChannels: StateFlow<List<String>> = _recent

@@ -91,6 +91,8 @@ data class Game(
     val detail: String,
     val competitors: List<Competitor>,
     val broadcasts: List<String>,
+    /** Latest scoring play from the scoreboard feed, when ESPN includes it (soccer mostly). */
+    val lastScoring: String = "",
 ) {
     val isLive get() = state == "in"
     val isFinal get() = state == "post"

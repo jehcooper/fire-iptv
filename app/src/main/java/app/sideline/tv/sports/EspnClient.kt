@@ -129,6 +129,20 @@ object EspnClient {
             ?: emptyList()) +
             (c["geoBroadcasts"].arr()?.mapNotNull { it.obj()?.get("media").obj()?.s("shortName") } ?: emptyList())
         val name = title.ifBlank { competitors.joinToString(" vs ") { it.shortName.ifBlank { it.name } } }
+        // Soccer scoreboards list goals in "details": scorer, minute, type (e.g. "Goal - Header", "Penalty").
+        val lastGoal = c["details"].arr()?.mapNotNull { it.obj() }?.lastOrNull { d ->
+            d.s("scoringPlay") == "true" || (d["type"].obj()?.s("text")?.contains("Goal", true) == true)
+        }
+        val lastScoring = lastGoal?.let { d ->
+            val who = d["athletesInvolved"].arr()?.mapNotNull { it.obj()?.s("displayName") } ?: emptyList()
+            val kind = d["type"].obj()?.s("text") ?: "Goal"
+            val minute = d["clock"].obj()?.s("displayValue") ?: ""
+            listOfNotNull(
+                who.firstOrNull()?.let { "$kind: $it" } ?: kind,
+                who.drop(1).takeIf { it.isNotEmpty() }?.joinToString(", ")?.let { "assist $it" },
+                minute.takeIf { it.isNotBlank() },
+            ).joinToString(" · ")
+        } ?: ""
         return Game(
             id = id,
             leagueId = league.id,
@@ -138,8 +152,37 @@ object EspnClient {
             detail = detail,
             competitors = competitors,
             broadcasts = broadcasts.distinct(),
+            lastScoring = lastScoring,
         )
     }
+
+    /**
+     * Who scored (and assisted) on the latest scoring play, e.g.
+     * "Auston Matthews (15) Wrist Shot, assists: Mitch Marner (20) · 2nd 12:41".
+     * From ESPN's game summary feed; empty if it isn't available.
+     */
+    suspend fun lastScoringPlay(league: League, eventId: String): String = try {
+        val root = Net.getJson("$SITE/${league.path}/summary?event=$eventId").obj()
+        val play = root?.get("scoringPlays").arr()?.lastOrNull().obj()
+        if (play != null) {
+            val text = play.s("text") ?: ""
+            val period = play["period"].obj()?.s("number")?.let { n ->
+                when (league.path.substringBefore("/")) {
+                    "hockey" -> "P$n"
+                    "football", "basketball" -> "Q$n"
+                    "baseball" -> "Inning $n"
+                    else -> ""
+                }
+            } ?: ""
+            val clock = play["clock"].obj()?.s("displayValue") ?: ""
+            listOf(text, listOf(period, clock).filter { it.isNotBlank() }.joinToString(" ")).filter { it.isNotBlank() }.joinToString(" · ")
+        } else {
+            // Soccer summaries use "keyEvents".
+            root?.get("keyEvents").arr()?.mapNotNull { it.obj() }?.lastOrNull { it.s("scoringPlay") == "true" }?.let { e ->
+                listOfNotNull(e.s("text") ?: e["type"].obj()?.s("text"), e["clock"].obj()?.s("displayValue")).joinToString(" · ")
+            } ?: ""
+        }
+    } catch (e: Exception) { "" }
 
     /** Cricket isn't on the standard scoreboard feed; ESPN's "header" feed lists live series. Beta. */
     private suspend fun cricket(league: League): List<Game> {

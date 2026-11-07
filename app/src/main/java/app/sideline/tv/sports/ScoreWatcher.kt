@@ -15,7 +15,7 @@ import kotlinx.coroutines.launch
 
 enum class AlertKind { SCORE, STARTING_SOON, STARTED, FINAL }
 
-data class ScoreAlert(val game: Game, val kind: AlertKind, val headline: String)
+data class ScoreAlert(val game: Game, val kind: AlertKind, val headline: String, val synopsis: String = "")
 
 /**
  * Polls scores for the user's favourite leagues and raises pop-up alerts for games they follow
@@ -102,7 +102,7 @@ class ScoreWatcher(private val prefs: Prefs) {
         GameMatcher.prefetch(priority, app.sideline.tv.SidelineApp.repo)
     }
 
-    private fun detect(prev: Game?, g: Game) {
+    private suspend fun detect(prev: Game?, g: Game) {
         val now = System.currentTimeMillis()
         if (g.state == "pre" && g.startMillis > 0 && g.startMillis - now in 0L..300_000L && soonSent.add(g.id)) {
             emit(g, AlertKind.STARTING_SOON, "Starting in ${((g.startMillis - now) / 60_000).coerceAtLeast(1)} min")
@@ -117,7 +117,11 @@ class ScoreWatcher(private val prefs: Prefs) {
                     val old = prev.competitors.firstOrNull { it.id == c.id }?.score
                     (c.score.toDoubleOrNull() ?: 0.0) > (old?.toDoubleOrNull() ?: 0.0)
                 }
-                emit(g, AlertKind.SCORE, if (scorer != null) "${scorer.shortName} score!" else "Score update")
+                // Who scored / assisted: soccer has it on the scoreboard; other sports need one extra request.
+                val synopsis = g.lastScoring.takeIf { it.isNotBlank() } ?: Leagues.byId(g.leagueId)?.let { l ->
+                    kotlinx.coroutines.withTimeoutOrNull(6_000) { EspnClient.lastScoringPlay(l, g.id) }
+                } ?: ""
+                _alerts.tryEmit(ScoreAlert(g, AlertKind.SCORE, if (scorer != null) "${scorer.shortName} score!" else "Score update", synopsis))
             }
         }
     }

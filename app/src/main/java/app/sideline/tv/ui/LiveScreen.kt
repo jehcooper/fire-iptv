@@ -85,6 +85,7 @@ fun LiveScreen() {
     var selected by rememberSaveable { mutableStateOf(if (favs.isNotEmpty()) FAV else "") }
     var query by rememberSaveable { mutableStateOf("") }
     var focusedCh by remember { mutableStateOf<Channel?>(null) }
+    val counts = remember(channels) { channels.groupingBy { "${it.accountId}:${it.categoryId}" }.eachCount() }
     var epg by remember { mutableStateOf<List<EpgItem>>(emptyList()) }
 
     if (channels.isEmpty()) {
@@ -112,10 +113,10 @@ fun LiveScreen() {
         LazyColumn(Modifier.width(300.dp), verticalArrangement = Arrangement.spacedBy(4.dp), contentPadding = PaddingValues(bottom = 60.dp)) {
             item { CategoryItem("🔍 Search", selected == SEARCH) { selected = SEARCH } }
             item { CategoryItem("★ Favourites (${favs.size})", selected == FAV) { selected = FAV } }
-            item { CategoryItem("⟲ Recent", selected == RECENT) { selected = RECENT } }
+            item { CategoryItem("⟲ Recent (${recent.size})", selected == RECENT) { selected = RECENT } }
             items(cats, key = { "${it.accountId}:${it.id}" }) { c ->
                 val prefix = if (multiAccount) (accounts.firstOrNull { it.id == c.accountId }?.name?.take(10)?.plus(" · ") ?: "") else ""
-                CategoryItem(prefix + c.name, selected == "${c.accountId}:${c.id}") { selected = "${c.accountId}:${c.id}" }
+                CategoryItem("$prefix${c.name}  (${counts["${c.accountId}:${c.id}"] ?: 0})", selected == "${c.accountId}:${c.id}") { selected = "${c.accountId}:${c.id}" }
             }
         }
         Spacer(Modifier.width(28.dp))
