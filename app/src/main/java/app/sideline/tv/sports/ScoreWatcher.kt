@@ -1,0 +1,113 @@
+package app.sideline.tv.sports
+
+import app.sideline.tv.data.Prefs
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
+
+enum class AlertKind { SCORE, STARTING_SOON, STARTED, FINAL }
+
+data class ScoreAlert(val game: Game, val kind: AlertKind, val headline: String)
+
+/**
+ * Polls scores for the user's favourite leagues and raises pop-up alerts for games they follow
+ * (and, if enabled, any game involving a favourite team).
+ */
+class ScoreWatcher(private val prefs: Prefs) {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    private val _board = MutableStateFlow<Map<String, List<Game>>>(emptyMap())
+    val board: StateFlow<Map<String, List<Game>>> = _board
+
+    private val _alerts = MutableSharedFlow<ScoreAlert>(extraBufferCapacity = 16)
+    val alerts: SharedFlow<ScoreAlert> = _alerts
+
+    private val _teams = MutableStateFlow<Map<String, List<Team>>>(emptyMap())
+    val teams: StateFlow<Map<String, List<Team>>> = _teams
+
+    private val last = mutableMapOf<String, Game>()
+    private val soonSent = mutableSetOf<String>()
+    private var started = false
+
+    fun start() {
+        if (started) return
+        started = true
+        scope.launch {
+            while (true) {
+                refreshOnce()
+                // Faster polling while something the user cares about is live.
+                val anyLiveFollowed = _board.value.values.flatten().any { it.isLive && isWatched(it) }
+                delay(if (anyLiveFollowed) 20_000 else 60_000)
+            }
+        }
+    }
+
+    fun refreshNow() { scope.launch { refreshOnce() } }
+
+    fun isWatched(g: Game): Boolean {
+        if (g.id in prefs.followedGames.value) return true
+        if (!prefs.autoFollowTeams.value) return false
+        val fav = prefs.favTeams.value
+        return g.competitors.any { "${g.leagueId}|${it.id}" in fav }
+    }
+
+    private suspend fun refreshOnce() {
+        val ids = prefs.favLeagues.value
+        val leagues = Leagues.all.filter { it.id in ids }
+        val results = kotlinx.coroutines.coroutineScope {
+            leagues.map { l -> async { l.id to EspnClient.scoreboard(l) } }.awaitAll()
+        }
+        val map = results.toMap()
+        _board.value = map
+        val finished = mutableSetOf<String>()
+        map.values.flatten().forEach { g ->
+            val prev = last[g.id]
+            if (isWatched(g)) detect(prev, g)
+            if (g.isFinal && prev?.isFinal == true) finished += g.id
+            last[g.id] = g
+        }
+        if (finished.isNotEmpty()) prefs.unfollowFinished(finished)
+    }
+
+    private fun detect(prev: Game?, g: Game) {
+        val now = System.currentTimeMillis()
+        if (g.state == "pre" && g.startMillis > 0 && g.startMillis - now in 0L..300_000L && soonSent.add(g.id)) {
+            emit(g, AlertKind.STARTING_SOON, "Starting in ${((g.startMillis - now) / 60_000).coerceAtLeast(1)} min")
+        }
+        if (prev == null) return
+        when {
+            prev.state == "pre" && g.state == "in" -> emit(g, AlertKind.STARTED, "Underway")
+            prev.state != "post" && g.state == "post" -> emit(g, AlertKind.FINAL, "Final")
+            g.isLive && prev.scoreKey != g.scoreKey && g.isTeamGame -> {
+                val scorer = g.competitors.firstOrNull { c ->
+                    val old = prev.competitors.firstOrNull { it.id == c.id }?.score
+                    (c.score.toDoubleOrNull() ?: 0.0) > (old?.toDoubleOrNull() ?: 0.0)
+                }
+                emit(g, AlertKind.SCORE, if (scorer != null) "${scorer.shortName} score!" else "Score update")
+            }
+        }
+    }
+
+    private fun emit(g: Game, kind: AlertKind, headline: String) {
+        _alerts.tryEmit(ScoreAlert(g, kind, headline))
+    }
+
+    fun loadTeams(leagueId: String) {
+        if (_teams.value.containsKey(leagueId)) return
+        val l = Leagues.byId(leagueId) ?: return
+        scope.launch {
+            val t = EspnClient.teams(l)
+            _teams.value = _teams.value + (leagueId to t)
+        }
+    }
+
+    fun game(id: String): Game? = _board.value.values.flatten().firstOrNull { it.id == id }
+}

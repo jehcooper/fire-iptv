@@ -1,0 +1,281 @@
+package app.sideline.tv.ui
+
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import app.sideline.tv.SidelineApp
+import app.sideline.tv.data.Account
+import app.sideline.tv.data.AccountStatus
+import app.sideline.tv.data.XtreamClient
+import app.sideline.tv.sports.LeagueKind
+import app.sideline.tv.sports.Leagues
+import coil.compose.AsyncImage
+import kotlinx.coroutines.launch
+import java.util.UUID
+
+@Composable
+fun SettingsScreen() {
+    val prefs = SidelineApp.prefs
+    val accounts by prefs.accounts.collectAsState()
+    val favLeagues by prefs.favLeagues.collectAsState()
+    val autoFollow by prefs.autoFollowTeams.collectAsState()
+    val spoilerFree by prefs.spoilerFree.collectAsState()
+    val channels by SidelineApp.repo.channels.collectAsState()
+    var editing by remember { mutableStateOf<Account?>(null) }
+    var teamsFor by remember { mutableStateOf<String?>(null) }
+
+    LazyColumn(
+        contentPadding = PaddingValues(start = 48.dp, end = 48.dp, top = 16.dp, bottom = 80.dp),
+        verticalArrangement = Arrangement.spacedBy(26.dp),
+    ) {
+        item {
+            Column {
+                SectionTitle("IPTV accounts")
+                Text("Add each subscription and choose what it supplies. Everything shows together.", color = C.Muted, fontSize = 14.sp)
+                Spacer(Modifier.height(12.dp))
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(vertical = 6.dp)) {
+                    items(accounts, key = { it.id }) { a ->
+                        FocusCard(onClick = { editing = a }, modifier = Modifier.width(280.dp).height(110.dp)) { _ ->
+                            Column(Modifier.padding(16.dp)) {
+                                Text(a.name, color = C.Text, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                                Text(listOfNotNull(if (a.useLive) "Live channels" else null, if (a.useVod) "Movies & series" else null).joinToString(" + "),
+                                    color = C.Accent, fontSize = 13.sp)
+                                Text(a.server.removePrefix("http://").removePrefix("https://"), color = C.Faint, fontSize = 12.sp, maxLines = 1)
+                            }
+                        }
+                    }
+                    item {
+                        FocusCard(onClick = {
+                            editing = Account(UUID.randomUUID().toString(), "Account ${accounts.size + 1}", "", "", "",
+                                useLive = accounts.none { it.useLive }, useVod = accounts.none { it.useVod } || accounts.isEmpty())
+                        }, modifier = Modifier.width(200.dp).height(110.dp)) { _ ->
+                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("＋ Add account", color = C.Accent, fontSize = 17.sp) }
+                        }
+                    }
+                }
+            }
+        }
+
+        item {
+            Column {
+                SectionTitle("Your leagues")
+                Text("Scores for these show on the Sports and Home screens.", color = C.Muted, fontSize = 14.sp)
+                Spacer(Modifier.height(8.dp))
+                Leagues.all.groupBy { it.group }.forEach { (group, list) ->
+                    Text(group, color = C.Faint, fontSize = 13.sp, modifier = Modifier.padding(top = 10.dp, bottom = 4.dp))
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(vertical = 6.dp)) {
+                        items(list, key = { it.id }) { l -> Chip(l.name, l.id in favLeagues, onClick = { prefs.toggleLeague(l.id) }) }
+                    }
+                }
+            }
+        }
+
+        item {
+            Column {
+                SectionTitle("Your teams")
+                Text("Games involving these teams appear in My Teams.", color = C.Muted, fontSize = 14.sp)
+                Spacer(Modifier.height(8.dp))
+                val teamLeagues = Leagues.all.filter { it.kind == LeagueKind.TEAM && it.id in favLeagues }
+                if (teamLeagues.isEmpty()) Text("Turn on a team league above first.", color = C.Faint)
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(vertical = 6.dp)) {
+                    items(teamLeagues, key = { it.id }) { l -> Chip("Pick ${l.name} teams", false, onClick = { teamsFor = l.id }) }
+                }
+            }
+        }
+
+        item {
+            Column {
+                SectionTitle("Pop-ups & scores")
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Chip(if (autoFollow) "✓ Pop-ups for my teams' games" else "Pop-ups for my teams' games", autoFollow,
+                        onClick = { prefs.setAutoFollowTeams(!autoFollow) })
+                    Chip(if (spoilerFree) "✓ Spoiler-free (hide scores)" else "Spoiler-free (hide scores)", spoilerFree,
+                        onClick = { prefs.setSpoilerFree(!spoilerFree) })
+                }
+                Text("You can also turn pop-ups on for any single game from the Sports screen.", color = C.Faint, fontSize = 13.sp,
+                    modifier = Modifier.padding(top = 8.dp))
+            }
+        }
+
+        item {
+            Column {
+                SectionTitle("About")
+                val catchup = when {
+                    channels.isEmpty() -> "Not checked yet (no channels loaded)"
+                    SidelineApp.repo.catchupAvailable -> "Yes. ${channels.count { it.hasArchive }} channels support catch-up (look for the CATCH-UP tag)"
+                    else -> "No. Your live provider doesn't offer catch-up"
+                }
+                Text("Catch-up: $catchup", color = C.Muted, fontSize = 14.sp)
+                Text("Scores come from ESPN's public feed. It's unofficial and may change.", color = C.Faint, fontSize = 13.sp)
+                Spacer(Modifier.height(10.dp))
+                Chip("⟳ Reload channels & movies", false, onClick = { SidelineApp.repo.refresh() })
+            }
+        }
+    }
+
+    editing?.let { a -> AccountEditor(a, isNew = accounts.none { it.id == a.id }, onDone = { editing = null }) }
+    teamsFor?.let { id -> TeamPicker(id) { teamsFor = null } }
+}
+
+@Composable
+private fun Field(label: String, value: String, onChange: (String) -> Unit, secret: Boolean = false) {
+    OutlinedTextField(
+        value = value, onValueChange = onChange, singleLine = true,
+        label = { Text(label) },
+        visualTransformation = if (secret) PasswordVisualTransformation() else VisualTransformation.None,
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = C.Accent, unfocusedBorderColor = C.Surface2,
+            focusedTextColor = C.Text, unfocusedTextColor = C.Text, cursorColor = C.Accent,
+            focusedLabelColor = C.Accent, unfocusedLabelColor = C.Muted,
+        ),
+        modifier = Modifier.fillMaxWidth(),
+    )
+}
+
+@Composable
+private fun AccountEditor(start: Account, isNew: Boolean, onDone: () -> Unit) {
+    val prefs = SidelineApp.prefs
+    var a by remember { mutableStateOf(start) }
+    var status by remember { mutableStateOf<AccountStatus?>(null) }
+    var testing by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    BackHandler { onDone() }
+
+    Box(Modifier.fillMaxSize().background(C.Bg.copy(alpha = 0.96f)), contentAlignment = Alignment.Center) {
+        LazyColumn(
+            Modifier.width(720.dp).clip(RoundedCornerShape(18.dp)).background(C.Surface),
+            contentPadding = PaddingValues(32.dp), verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            item { Text(if (isNew) "Add IPTV account" else "Edit ${start.name}", color = C.Text, fontSize = 24.sp, fontWeight = FontWeight.Bold) }
+            item { Field("Nickname (e.g. Live TV, Movies)", a.name, { a = a.copy(name = it) }) }
+            item { Field("Server address (e.g. http://example.com:8080)", a.server, { a = a.copy(server = it.trim()) }) }
+            item { Field("Username", a.username, { a = a.copy(username = it.trim()) }) }
+            item { Field("Password", a.password, { a = a.copy(password = it.trim()) }, secret = true) }
+            item {
+                Column {
+                    Text("This account supplies:", color = C.Muted, fontSize = 14.sp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 6.dp)) {
+                        Chip(if (a.useLive) "✓ Live channels" else "Live channels", a.useLive, onClick = { a = a.copy(useLive = !a.useLive) })
+                        Chip(if (a.useVod) "✓ Movies & series" else "Movies & series", a.useVod, onClick = { a = a.copy(useVod = !a.useVod) })
+                    }
+                }
+            }
+            item {
+                Column {
+                    Text("Live stream format (try HLS if channels stutter):", color = C.Muted, fontSize = 14.sp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 6.dp)) {
+                        Chip("MPEG-TS (default)", a.liveFormat == "ts", onClick = { a = a.copy(liveFormat = "ts") })
+                        Chip("HLS (m3u8)", a.liveFormat == "m3u8", onClick = { a = a.copy(liveFormat = "m3u8") })
+                    }
+                }
+            }
+            item {
+                status?.let { s ->
+                    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(C.Surface2).padding(14.dp)) {
+                        Text(if (s.ok) "✓ Connected" else "✗ Problem", color = if (s.ok) C.Accent else C.Live, fontWeight = FontWeight.Bold)
+                        Text(s.message, color = C.Text, fontSize = 14.sp)
+                        s.expires?.let { Text("Expires: $it", color = C.Muted, fontSize = 13.sp) }
+                        s.maxConnections?.let { Text("Devices allowed at once: $it", color = C.Muted, fontSize = 13.sp) }
+                    }
+                }
+            }
+            item {
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Chip(if (testing) "Testing…" else "Test & save", true, onClick = {
+                        if (testing) return@Chip
+                        testing = true
+                        scope.launch {
+                            val s = XtreamClient(a).login()
+                            status = s
+                            testing = false
+                            if (s.ok) {
+                                prefs.saveAccount(a)
+                                SidelineApp.repo.refresh()
+                                onDone()
+                            }
+                        }
+                    })
+                    Chip("Save without testing", false, onClick = { prefs.saveAccount(a); SidelineApp.repo.refresh(); onDone() })
+                    if (!isNew) Chip("Delete", false, onClick = { prefs.deleteAccount(a.id); SidelineApp.repo.refresh(); onDone() })
+                    Chip("Cancel", false, onClick = onDone)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TeamPicker(leagueId: String, onDone: () -> Unit) {
+    val prefs = SidelineApp.prefs
+    val teamsMap by SidelineApp.scores.teams.collectAsState()
+    val fav by prefs.favTeams.collectAsState()
+    val league = Leagues.byId(leagueId)
+    LaunchedEffect(leagueId) { SidelineApp.scores.loadTeams(leagueId) }
+    BackHandler { onDone() }
+    Box(Modifier.fillMaxSize().background(C.Bg)) {
+        Column(Modifier.fillMaxSize().padding(start = 48.dp, end = 48.dp, top = 32.dp)) {
+            Text("${league?.name ?: ""} teams", color = C.Text, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+            Text("Select to add or remove. Press Back when done.", color = C.Muted, fontSize = 14.sp, modifier = Modifier.padding(bottom = 12.dp))
+            val teams = teamsMap[leagueId]
+            if (teams == null) { Text("Loading teams…", color = C.Muted); return@Column }
+            if (teams.isEmpty()) { Text("Couldn't load teams right now. Try again later.", color = C.Muted); return@Column }
+            LazyVerticalGrid(
+                columns = GridCells.Adaptive(200.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = PaddingValues(bottom = 60.dp, top = 8.dp),
+            ) {
+                items(teams, key = { it.id }) { t ->
+                    val on = "$leagueId|${t.id}" in fav
+                    FocusCard(onClick = { prefs.toggleTeam(leagueId, t.id) }, modifier = Modifier.height(72.dp)) { _ ->
+                        Row(
+                            Modifier.fillMaxSize().background(if (on) C.hex(t.color).copy(alpha = 0.45f) else C.Surface).padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            AsyncImage(model = t.logo, contentDescription = null, modifier = Modifier.size(44.dp))
+                            Spacer(Modifier.width(10.dp))
+                            Text(t.name, color = C.Text, fontSize = 14.sp, maxLines = 2, modifier = Modifier.weight(1f))
+                            if (on) Text("★", color = C.Gold, fontSize = 18.sp)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
