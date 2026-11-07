@@ -52,6 +52,10 @@ import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.DefaultRenderersFactory
+import androidx.media3.exoplayer.Renderer
+import androidx.media3.exoplayer.text.TextOutput
+import androidx.media3.exoplayer.text.TextRenderer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.PlayerView
 import app.sideline.tv.SidelineApp
@@ -116,6 +120,7 @@ class PlayerActivity : ComponentActivity() {
     private var vodUrl: String? = null
     private var subsPanel by mutableStateOf(false)
     private var subsInitDone = false
+    private var subsRecoveryTried = false
     private var externalSub: java.io.File? = null
     private var playerView: PlayerView? = null
     private var paused by mutableStateOf(false)
@@ -135,11 +140,34 @@ class PlayerActivity : ComponentActivity() {
         val item = Play.pending
         if (item == null) { finish(); return }
 
-        player = ExoPlayer.Builder(this)
-            .setMediaSourceFactory(DefaultMediaSourceFactory(OkHttpDataSource.Factory(Net.http)))
+        // Subtitles: convert them while loading the file (Media3's default), and also let the text renderer
+        // decode raw subtitle formats itself. Without the second part, some files/subtitle sources make the
+        // player stop with ERROR_CODE_FAILED_RUNTIME_CHECK.
+        val renderers = object : DefaultRenderersFactory(this) {
+            override fun buildTextRenderers(
+                context: android.content.Context, output: TextOutput, outputLooper: android.os.Looper,
+                extensionRendererMode: Int, out: java.util.ArrayList<Renderer>,
+            ) {
+                out.add(TextRenderer(output, outputLooper).apply { experimentalSetLegacyDecodingEnabled(true) })
+            }
+        }
+        player = ExoPlayer.Builder(this, renderers)
+            .setMediaSourceFactory(
+                DefaultMediaSourceFactory(OkHttpDataSource.Factory(Net.http)).experimentalParseSubtitlesDuringExtraction(true),
+            )
             .build()
         player.addListener(object : Player.Listener {
-            override fun onPlayerError(error: PlaybackException) = handleFailure("error ${error.errorCodeName}")
+            override fun onPlayerError(error: PlaybackException) {
+                // Movies/episodes: if subtitles are on, assume they caused it — turn them off and carry on.
+                if (!live && !subsRecoveryTried && subtitlesActive()) {
+                    subsRecoveryTried = true
+                    recoverWithoutSubtitles()
+                    return
+                }
+                val detail = (error.cause?.message ?: error.message ?: "").take(80)
+                handleFailure(error.errorCodeName.removePrefix("ERROR_CODE_").lowercase().replace('_', ' ') +
+                    if (detail.isNotBlank()) ": $detail" else "")
+            }
             override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) { paused = !playWhenReady }
             override fun onTracksChanged(tracks: Tracks) {
                 // First time a movie/episode's tracks are known: apply the subtitles-on/off preference.
@@ -253,6 +281,18 @@ class PlayerActivity : ComponentActivity() {
             val name = f.label ?: lang?.let { java.util.Locale(it).displayLanguage.ifBlank { it } } ?: "Unknown"
             TextTrack(g, name, lang)
         }
+
+    private fun subtitlesActive() = !player.trackSelectionParameters.disabledTrackTypes.contains(MC.TRACK_TYPE_TEXT) &&
+        (externalSub != null || player.currentTracks.groups.any { it.type == MC.TRACK_TYPE_TEXT && it.isSelected } || prefs.subsOn.value)
+
+    private fun recoverWithoutSubtitles() {
+        val url = vodUrl ?: return
+        val pos = player.currentPosition
+        externalSub = null
+        subtitlesOff()
+        start(url, null, pos)
+        flash("Subtitles caused a playback error on this file, so they're off. Press ▲ to try a different one.")
+    }
 
     private fun subtitlesOff() {
         player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
