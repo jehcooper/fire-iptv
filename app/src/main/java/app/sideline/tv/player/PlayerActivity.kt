@@ -69,6 +69,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import app.sideline.tv.data.Net
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.lazy.LazyColumn
@@ -590,7 +592,7 @@ class PlayerActivity : ComponentActivity() {
                 Column(
                     Modifier.fillMaxWidth()
                         .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xE6000000), Color(0xF2000000))))
-                        .padding(start = 56.dp, end = 56.dp, top = 80.dp, bottom = if (prefs.pinnedGames.value.isEmpty()) 36.dp else 96.dp),
+                        .padding(start = 56.dp, end = 56.dp, top = 80.dp, bottom = if (prefs.pinnedGames.value.isEmpty()) 36.dp else (36 + 62 * ((prefs.pinnedGames.value.size + 2) / 3)).dp),
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         current?.logo?.let { if (live) AsyncImage(model = it, contentDescription = null, modifier = Modifier.size(width = 96.dp, height = 54.dp)) }
@@ -637,6 +639,7 @@ class PlayerActivity : ComponentActivity() {
     }
 
     /** Pinned games along the bottom, always visible while watching. */
+    @kotlin.OptIn(ExperimentalLayoutApi::class)
     @Composable
     private fun PinnedTicker() {
         val pinned by prefs.pinnedGames.collectAsState()
@@ -644,8 +647,12 @@ class PlayerActivity : ComponentActivity() {
         val spoilerFree by prefs.spoilerFree.collectAsState()
         val games = board.values.flatten().distinctBy { it.id }.filter { it.id in pinned }
         if (games.isEmpty()) return
-        Box(Modifier.fillMaxSize().padding(bottom = 20.dp), contentAlignment = Alignment.BottomCenter) {
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Box(Modifier.fillMaxSize().padding(start = 32.dp, end = 32.dp, bottom = 20.dp), contentAlignment = Alignment.BottomCenter) {
+            // Wraps onto extra rows instead of squeezing the last scores off the edge.
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 games.forEach { g ->
                     Row(
                         Modifier.clip(RoundedCornerShape(10.dp)).background(Color(0xE6131A22)).padding(horizontal = 12.dp, vertical = 8.dp),
