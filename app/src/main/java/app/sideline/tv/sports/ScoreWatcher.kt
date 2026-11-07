@@ -33,6 +33,10 @@ class ScoreWatcher(private val prefs: Prefs) {
     private val _teams = MutableStateFlow<Map<String, List<Team>>>(emptyMap())
     val teams: StateFlow<Map<String, List<Team>>> = _teams
 
+    private val _conferences = MutableStateFlow(Leagues.conferences)
+    val conferences: StateFlow<List<Conference>> = _conferences
+    private var confsLoadedAt = 0L
+
     private val last = mutableMapOf<String, Game>()
     private val soonSent = mutableSetOf<String>()
     private var started = false
@@ -56,19 +60,32 @@ class ScoreWatcher(private val prefs: Prefs) {
         if (g.id in prefs.followedGames.value) return true
         if (!prefs.autoFollowTeams.value) return false
         val fav = prefs.favTeams.value
-        return g.competitors.any { "${g.leagueId}|${it.id}" in fav }
+        return g.competitors.any { Leagues.teamKey(g.leagueId, it.id) in fav }
+    }
+
+    /** FBS conference list (with teams) — refreshed at most every 12 hours. */
+    suspend fun ensureConferences() {
+        if (System.currentTimeMillis() - confsLoadedAt < 12 * 3600_000L && _conferences.value.any { it.teams.isNotEmpty() }) return
+        val fresh = EspnClient.fbsConferences() ?: return
+        Leagues.conferences = fresh
+        _conferences.value = fresh
+        confsLoadedAt = System.currentTimeMillis()
+        _teams.value = _teams.value + ("ncaaf" to fresh.flatMap { it.teams }.distinctBy { it.id }.sortedBy { it.name })
     }
 
     private suspend fun refreshOnce() {
         val ids = prefs.favLeagues.value
-        val leagues = Leagues.all.filter { it.id in ids }
+        if (prefs.favConferences.value.isNotEmpty() || "ncaaf" in ids) ensureConferences()
+        val leagues = Leagues.all.filter { it.id in ids } +
+            prefs.favConferences.value.mapNotNull { Leagues.byId(Leagues.CONF_PREFIX + it) }
         val results = kotlinx.coroutines.coroutineScope {
             leagues.map { l -> async { l.id to EspnClient.scoreboard(l) } }.awaitAll()
         }
         val map = results.toMap()
         _board.value = map
         val finished = mutableSetOf<String>()
-        map.values.flatten().forEach { g ->
+        // The same game can appear under "College Football" and a conference tab; handle it once.
+        map.values.flatten().distinctBy { it.id }.forEach { g ->
             val prev = last[g.id]
             if (isWatched(g)) detect(prev, g)
             if (g.isFinal && prev?.isFinal == true) finished += g.id
@@ -104,10 +121,16 @@ class ScoreWatcher(private val prefs: Prefs) {
         if (_teams.value.containsKey(leagueId)) return
         val l = Leagues.byId(leagueId) ?: return
         scope.launch {
+            if (leagueId == "ncaaf") {
+                ensureConferences()
+                if (_teams.value.containsKey("ncaaf")) return@launch
+            }
             val t = EspnClient.teams(l)
             _teams.value = _teams.value + (leagueId to t)
         }
     }
 
     fun game(id: String): Game? = _board.value.values.flatten().firstOrNull { it.id == id }
+
+    fun loadConferences() { scope.launch { ensureConferences() } }
 }

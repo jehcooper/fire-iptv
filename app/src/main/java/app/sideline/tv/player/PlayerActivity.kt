@@ -50,6 +50,10 @@ import androidx.media3.ui.PlayerView
 import app.sideline.tv.SidelineApp
 import app.sideline.tv.data.Channel
 import app.sideline.tv.data.EpgItem
+import app.sideline.tv.data.MovieInfo
+import app.sideline.tv.data.MovieInfoService
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.style.TextOverflow
 import app.sideline.tv.data.Net
 import app.sideline.tv.ui.C
 import app.sideline.tv.ui.Pill
@@ -84,6 +88,8 @@ class PlayerActivity : ComponentActivity() {
     private var position by mutableLongStateOf(0L)
     private var duration by mutableLongStateOf(0L)
     private var vodKey: String? = null
+    private var paused by mutableStateOf(false)
+    private var details by mutableStateOf<MovieInfo?>(null)
     private val tried = mutableSetOf<String>()
     private var infoJob: Job? = null
     private var toastJob: Job? = null
@@ -100,6 +106,7 @@ class PlayerActivity : ComponentActivity() {
             .build()
         player.addListener(object : Player.Listener {
             override fun onPlayerError(error: PlaybackException) = handleFailure("error ${error.errorCodeName}")
+            override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) { paused = !playWhenReady }
             override fun onPlaybackStateChanged(state: Int) {
                 stallJob?.cancel()
                 if (state == Player.STATE_BUFFERING && live && !catchUp) {
@@ -120,6 +127,10 @@ class PlayerActivity : ComponentActivity() {
                 start(item.url)
                 val resume = getSharedPreferences("resume", MODE_PRIVATE).getLong(item.key, 0L)
                 if (resume > 60_000) { player.seekTo(resume); flash("Resuming where you left off") }
+                // Details for the pause screen.
+                val mv = item.movie
+                if (mv != null) lifecycleScope.launch { details = MovieInfoService.get(mv) }
+                else if (!item.plot.isNullOrBlank()) details = MovieInfo(title = item.subtitle, plot = item.plot, poster = item.image)
                 showInfoBriefly()
             }
             is Play.Item.CatchUp -> { current = item.channel; catchUp = true; title = item.title; start(item.url) }
@@ -140,6 +151,7 @@ class PlayerActivity : ComponentActivity() {
                     )
                     PositionTicker()
                     InfoOverlay()
+                    PauseOverlay()
                     ToastOverlay()
                     ScorePopupHost()
                 }
@@ -305,7 +317,7 @@ class PlayerActivity : ComponentActivity() {
     @Composable
     private fun InfoOverlay() {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
-            AnimatedVisibility(visible = showInfo, enter = fadeIn(), exit = fadeOut()) {
+            AnimatedVisibility(visible = showInfo && !(paused && !live), enter = fadeIn(), exit = fadeOut()) {
                 Column(
                     Modifier.fillMaxWidth()
                         .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xE6000000), Color(0xF2000000))))
@@ -348,6 +360,47 @@ class PlayerActivity : ComponentActivity() {
                         }
                         Text(if (player.playWhenReady) "OK pause   ◀ −10s   ▶ +30s" else "Paused · OK to resume",
                             color = C.Faint, fontSize = 13.sp, modifier = Modifier.padding(top = 10.dp))
+                    }
+                }
+            }
+        }
+    }
+
+    /** Movies & episodes: pausing shows what you're watching — description, cast, where you are. */
+    @Composable
+    private fun PauseOverlay() {
+        AnimatedVisibility(visible = paused && !live, enter = fadeIn(), exit = fadeOut()) {
+            val d = details
+            Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(listOf(Color(0xF20B0F14), Color(0xD90B0F14), Color(0x800B0F14))))) {
+                Row(Modifier.fillMaxSize().padding(start = 64.dp, end = 64.dp, top = 56.dp, bottom = 40.dp)) {
+                    if (d?.poster != null) {
+                        AsyncImage(model = d.poster, contentDescription = null, contentScale = ContentScale.Crop,
+                            modifier = Modifier.size(width = 200.dp, height = 300.dp).clip(RoundedCornerShape(12.dp)))
+                        Spacer(Modifier.width(36.dp))
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Text("PAUSED", color = C.Accent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        Text(if (subtitle.isNotBlank() && d?.title == subtitle) title else (d?.title ?: title),
+                            color = C.Text, fontSize = 32.sp, fontWeight = FontWeight.Bold, maxLines = 2)
+                        if (subtitle.isNotBlank()) Text(subtitle, color = C.Muted, fontSize = 18.sp)
+                        if (d != null && d.metaLine.isNotBlank()) Text(d.metaLine, color = C.Accent, fontSize = 15.sp, modifier = Modifier.padding(top = 6.dp))
+                        Text(
+                            when {
+                                d == null -> "Looking up details…"
+                                d.plot.isBlank() -> "No description found for this title."
+                                else -> d.plot
+                            },
+                            color = C.Text, fontSize = 17.sp, maxLines = 8, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 16.dp),
+                        )
+                        if (d != null && d.director.isNotBlank()) Text("Director: ${d.director}", color = C.Muted, fontSize = 14.sp, maxLines = 1, modifier = Modifier.padding(top = 12.dp))
+                        if (d != null && d.cast.isNotBlank()) Text("Cast: ${d.cast}", color = C.Muted, fontSize = 14.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        if (d != null && d.plotSource.isNotBlank()) Text(d.plotSource, color = C.Faint, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
+                        Spacer(Modifier.weight(1f))
+                        if (duration > 0) {
+                            ProgressBar(position.toFloat() / duration)
+                            Text("${fmt(position)} / ${fmt(duration)}   ·   ${fmt((duration - position).coerceAtLeast(0))} left", color = C.Muted, fontSize = 15.sp)
+                        }
+                        Text("OK or Play to resume   ◀ −10s   ▶ +30s   Back to exit", color = C.Faint, fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp))
                     }
                 }
             }

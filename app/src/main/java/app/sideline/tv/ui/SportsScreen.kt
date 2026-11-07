@@ -56,11 +56,14 @@ fun SportsScreen(goTo: (Tab) -> Unit) {
     val favLeagues by prefs.favLeagues.collectAsState()
     val followed by prefs.followedGames.collectAsState()
     val spoilerFree by prefs.spoilerFree.collectAsState()
-    val leagues = Leagues.all.filter { it.id in favLeagues }
+    val favConfs by prefs.favConferences.collectAsState()
+    val confs by SidelineApp.scores.conferences.collectAsState()
+    val leagues = Leagues.all.filter { it.id in favLeagues } +
+        confs.filter { it.id in favConfs }.map { Leagues.conferenceLeague(it) }
     var selected by rememberSaveable { mutableStateOf("all") }
     var openGame by remember { mutableStateOf<Game?>(null) }
 
-    val games = (if (selected == "all") board.values.flatten() else board[selected].orEmpty())
+    val games = (if (selected == "all") board.values.flatten().distinctBy { it.id } else board[selected].orEmpty())
     val live = games.filter { it.isLive }
     val upcoming = games.filter { it.state == "pre" }.sortedBy { it.startMillis }
     val finals = games.filter { it.isFinal }

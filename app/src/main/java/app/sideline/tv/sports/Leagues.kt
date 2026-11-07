@@ -11,7 +11,13 @@ data class League(
     val kind: LeagueKind,
     /** Words that hint a channel/category carries this sport. */
     val keywords: List<String>,
+    /** Extra scoreboard query, e.g. "groups=80" for all FBS games. */
+    val query: String = "",
+    /** League that team favourites belong to (conference tabs share college football's teams). */
+    val baseId: String = id,
 )
+
+data class Conference(val id: String, val name: String, val short: String, val teams: List<Team>)
 
 object Leagues {
     val all = listOf(
@@ -20,7 +26,7 @@ object Leagues {
         League("nba", "NBA", "North America", "basketball/nba", LeagueKind.TEAM, listOf("nba", "basketball", "league pass")),
         League("mlb", "MLB", "North America", "baseball/mlb", LeagueKind.TEAM, listOf("mlb", "baseball", "extra innings")),
         League("wnba", "WNBA", "North America", "basketball/wnba", LeagueKind.TEAM, listOf("wnba", "basketball")),
-        League("ncaaf", "College Football", "North America", "football/college-football", LeagueKind.TEAM, listOf("ncaa", "college", "football")),
+        League("ncaaf", "College Football (all FBS)", "North America", "football/college-football", LeagueKind.TEAM, listOf("ncaa", "college", "football", "espnu", "sec network", "big ten", "acc network"), query = "groups=80&limit=300"),
         League("ncaab", "College Basketball", "North America", "basketball/mens-college-basketball", LeagueKind.TEAM, listOf("ncaa", "college", "basketball")),
 
         League("epl", "Premier League", "Soccer", "soccer/eng.1", LeagueKind.TEAM, listOf("premier league", "epl", "soccer", "football")),
@@ -40,7 +46,28 @@ object Leagues {
         League("f1", "Formula 1", "Tennis · Golf · F1", "racing/f1", LeagueKind.FIELD, listOf("f1", "formula 1", "formula one", "racing")),
     )
 
-    fun byId(id: String) = all.firstOrNull { it.id == id }
+    /** FBS conferences, refreshed from ESPN; this built-in list is only a fallback. */
+    @Volatile var conferences: List<Conference> = listOf(
+        "1" to "ACC", "151" to "American", "4" to "Big 12", "5" to "Big Ten", "12" to "Conference USA",
+        "18" to "FBS Independents", "15" to "MAC", "17" to "Mountain West", "9" to "Pac-12", "8" to "SEC", "37" to "Sun Belt",
+    ).map { (id, n) -> Conference(id, n, n, emptyList()) }
+
+    const val CONF_PREFIX = "cfb-conf-"
+
+    fun conferenceLeague(c: Conference) = League(
+        id = CONF_PREFIX + c.id, name = c.short, group = "College Football", path = "football/college-football",
+        kind = LeagueKind.TEAM, keywords = listOf("ncaa", "college", "football", c.short.lowercase()),
+        query = "groups=${c.id}&limit=300", baseId = "ncaaf",
+    )
+
+    fun byId(id: String): League? = all.firstOrNull { it.id == id }
+        ?: if (id.startsWith(CONF_PREFIX)) {
+            val cid = id.removePrefix(CONF_PREFIX)
+            conferenceLeague(conferences.firstOrNull { it.id == cid } ?: Conference(cid, "Conference $cid", "Conf $cid", emptyList()))
+        } else null
+
+    /** Key used for favourite teams: "ncaaf|<teamId>" even for games shown under a conference tab. */
+    fun teamKey(leagueId: String, teamId: String) = "${byId(leagueId)?.baseId ?: leagueId}|$teamId"
 }
 
 data class Competitor(

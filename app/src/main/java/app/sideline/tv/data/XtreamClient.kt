@@ -108,8 +108,30 @@ class XtreamClient(val account: Account) {
         return out.sortedWith(compareBy({ it.season }, { it.number }))
     }
 
-    suspend fun moviePlot(streamId: Int): String? = try {
-        call("get_vod_info", mapOf("vod_id" to streamId.toString())).obj()?.get("info").obj()?.s("plot")
+    /** Provider's own movie details (many panels copy these from TMDB). */
+    suspend fun movieInfo(m: Movie): MovieInfo? = try {
+        val info = call("get_vod_info", mapOf("vod_id" to m.streamId.toString())).obj()?.get("info").obj()
+        if (info == null) null else {
+            val backdrop = info["backdrop_path"].arr()?.firstOrNull()?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }
+                ?: info.s("backdrop_path")
+            val date = info.s("releasedate") ?: info.s("releaseDate") ?: info.s("release_date") ?: info.s("year") ?: ""
+            val runtime = info.s("duration")?.let { d ->
+                val p = d.split(":").mapNotNull { it.toIntOrNull() }
+                if (p.size >= 2 && (p[0] > 0 || p[1] > 0)) (if (p[0] > 0) "${p[0]}h ${p[1]}m" else "${p[1]}m") else null
+            } ?: info.s("episode_run_time")?.let { "$it min" } ?: ""
+            MovieInfo(
+                title = info.s("name") ?: info.s("o_name") ?: m.name,
+                plot = info.s("plot") ?: info.s("description") ?: "",
+                year = Regex("(19|20)\\d{2}").find(date)?.value ?: "",
+                genre = info.s("genre") ?: "",
+                runtime = runtime,
+                rating = info.s("rating")?.takeIf { it != "0" && it != "0.0" } ?: "",
+                director = info.s("director") ?: "",
+                cast = info.s("cast") ?: info.s("actors") ?: "",
+                backdrop = backdrop?.takeIf { it.startsWith("http") },
+                poster = info.s("movie_image") ?: info.s("cover_big") ?: m.poster,
+            )
+        }
     } catch (e: Exception) { null }
 
     suspend fun shortEpg(streamId: Int, limit: Int = 4): List<EpgItem> = try {

@@ -56,6 +56,25 @@ data class Movie(
     val key: String get() = "$accountId:$streamId"
 }
 
+/** What we know about a movie, from the provider and (if that's thin) Wikipedia. */
+data class MovieInfo(
+    val title: String,
+    val plot: String = "",
+    val year: String = "",
+    val genre: String = "",
+    val runtime: String = "",
+    val rating: String = "",
+    val director: String = "",
+    val cast: String = "",
+    val backdrop: String? = null,
+    val poster: String? = null,
+    /** Shown as a credit when the description came from outside the provider. */
+    val plotSource: String = "",
+) {
+    val metaLine: String get() = listOf(year, genre, runtime, rating.takeIf { it.isNotBlank() }?.let { "★ $it" } ?: "")
+        .filter { it.isNotBlank() }.joinToString("  ·  ")
+}
+
 data class Series(
     val accountId: String,
     val seriesId: Int,

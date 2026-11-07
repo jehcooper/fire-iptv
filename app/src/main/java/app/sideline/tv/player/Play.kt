@@ -11,7 +11,13 @@ import app.sideline.tv.data.Movie
 object Play {
     sealed class Item {
         data class Live(val channel: Channel, val queue: List<Channel>) : Item()
-        data class Vod(val key: String, val title: String, val url: String, val subtitle: String = "") : Item()
+        data class Vod(
+            val key: String, val title: String, val url: String, val subtitle: String = "",
+            /** Set for movies so the pause screen can show the description. */
+            val movie: Movie? = null,
+            /** Set for episodes: their own description and still image. */
+            val plot: String? = null, val image: String? = null,
+        ) : Item()
         data class CatchUp(val channel: Channel, val title: String, val url: String) : Item()
     }
 
@@ -27,11 +33,11 @@ object Play {
 
     fun movie(ctx: Context, m: Movie) {
         val url = SidelineApp.repo.client(m.accountId)?.movieUrl(m) ?: return
-        launch(ctx, Item.Vod("movie:${m.key}", m.name, url))
+        launch(ctx, Item.Vod("movie:${m.key}", m.name, url, movie = m))
     }
 
     fun episode(ctx: Context, e: Episode, seriesName: String) {
         val url = SidelineApp.repo.client(e.accountId)?.episodeUrl(e) ?: return
-        launch(ctx, Item.Vod("ep:${e.accountId}:${e.id}", seriesName, url, "S${e.season} E${e.number} · ${e.title}"))
+        launch(ctx, Item.Vod("ep:${e.accountId}:${e.id}", seriesName, url, "S${e.season} E${e.number} · ${e.title}", plot = e.plot, image = e.image))
     }
 }

@@ -44,6 +44,8 @@ import app.sideline.tv.data.Account
 import app.sideline.tv.data.AccountStatus
 import app.sideline.tv.data.XtreamClient
 import app.sideline.tv.sports.LeagueKind
+import app.sideline.tv.sports.Team
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import app.sideline.tv.sports.Leagues
 import coil.compose.AsyncImage
 import kotlinx.coroutines.delay
@@ -62,6 +64,9 @@ fun SettingsScreen() {
     val channels by SidelineApp.repo.channels.collectAsState()
     var editing by remember { mutableStateOf<Account?>(null) }
     var teamsFor by remember { mutableStateOf<String?>(null) }
+    val confs by SidelineApp.scores.conferences.collectAsState()
+    val favConfs by prefs.favConferences.collectAsState()
+    LaunchedEffect(Unit) { SidelineApp.scores.loadConferences() }
 
     LazyColumn(
         contentPadding = PaddingValues(start = 48.dp, end = 48.dp, top = 16.dp, bottom = 80.dp),
@@ -103,7 +108,20 @@ fun SettingsScreen() {
                 Leagues.all.groupBy { it.group }.forEach { (group, list) ->
                     Text(group, color = C.Faint, fontSize = 13.sp, modifier = Modifier.padding(top = 10.dp, bottom = 4.dp))
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(vertical = 6.dp)) {
-                        items(list, key = { it.id }) { l -> Chip(l.name, l.id in favLeagues, onClick = { prefs.toggleLeague(l.id) }) }
+                        items(list, key = { it.id }) { l -> Chip(l.name, l.id in favLeagues, onClick = { prefs.toggleLeague(l.id); SidelineApp.scores.refreshNow() }) }
+                    }
+                }
+            }
+        }
+
+        item {
+            Column {
+                SectionTitle("College football conferences")
+                Text("Each conference you pick gets its own tab on the Sports screen with all its games.", color = C.Muted, fontSize = 14.sp)
+                Spacer(Modifier.height(8.dp))
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(vertical = 6.dp)) {
+                    items(confs, key = { it.id }) { c ->
+                        Chip(c.short, c.id in favConfs, onClick = { prefs.toggleConference(c.id); SidelineApp.scores.refreshNow() })
                     }
                 }
             }
@@ -114,7 +132,7 @@ fun SettingsScreen() {
                 SectionTitle("Your teams")
                 Text("Games involving these teams appear in My Teams.", color = C.Muted, fontSize = 14.sp)
                 Spacer(Modifier.height(8.dp))
-                val teamLeagues = Leagues.all.filter { it.kind == LeagueKind.TEAM && it.id in favLeagues }
+                val teamLeagues = Leagues.all.filter { it.kind == LeagueKind.TEAM && (it.id in favLeagues || (it.id == "ncaaf" && favConfs.isNotEmpty())) }
                 if (teamLeagues.isEmpty()) Text("Turn on a team league above first.", color = C.Faint)
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(vertical = 6.dp)) {
                     items(teamLeagues, key = { it.id }) { l -> Chip("Pick ${l.name} teams", false, onClick = { teamsFor = l.id }) }
@@ -252,6 +270,7 @@ private fun TeamPicker(leagueId: String, onDone: () -> Unit) {
     val teamsMap by SidelineApp.scores.teams.collectAsState()
     val fav by prefs.favTeams.collectAsState()
     val league = Leagues.byId(leagueId)
+    val confs by SidelineApp.scores.conferences.collectAsState()
     LaunchedEffect(leagueId) { SidelineApp.scores.loadTeams(leagueId) }
     TvDialog(onDone) {
     Box(Modifier.fillMaxSize().background(C.Bg)) {
@@ -261,22 +280,31 @@ private fun TeamPicker(leagueId: String, onDone: () -> Unit) {
             val teams = teamsMap[leagueId]
             if (teams == null) { Text("Loading teams…", color = C.Muted); return@Column }
             if (teams.isEmpty()) { Text("Couldn't load teams right now. Try again later.", color = C.Muted); return@Column }
+            // College football: show teams under their conference headings.
+            val sections: List<Pair<String, List<Team>>> =
+                if (leagueId == "ncaaf" && confs.any { it.teams.isNotEmpty() }) confs.filter { it.teams.isNotEmpty() }.map { it.name to it.teams }
+                else listOf("" to teams)
             LazyVerticalGrid(
                 columns = GridCells.Adaptive(200.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp),
                 contentPadding = PaddingValues(bottom = 60.dp, top = 8.dp),
             ) {
-                items(teams, key = { it.id }) { t ->
-                    val on = "$leagueId|${t.id}" in fav
-                    FocusCard(onClick = { prefs.toggleTeam(leagueId, t.id) }, modifier = Modifier.height(72.dp)) { _ ->
-                        Row(
-                            Modifier.fillMaxSize().background(if (on) C.hex(t.color).copy(alpha = 0.45f) else C.Surface).padding(10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            AsyncImage(model = t.logo, contentDescription = null, modifier = Modifier.size(44.dp))
-                            Spacer(Modifier.width(10.dp))
-                            Text(t.name, color = C.Text, fontSize = 14.sp, maxLines = 2, modifier = Modifier.weight(1f))
-                            if (on) Text("★", color = C.Gold, fontSize = 18.sp)
+                sections.forEach { (title, list) ->
+                    if (title.isNotBlank()) item(key = "h-$title", span = { GridItemSpan(maxLineSpan) }) {
+                        Text(title, color = C.Accent, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 12.dp))
+                    }
+                    items(list, key = { "$title-${it.id}" }) { t ->
+                        val on = "$leagueId|${t.id}" in fav
+                        FocusCard(onClick = { prefs.toggleTeam(leagueId, t.id) }, modifier = Modifier.height(72.dp)) { _ ->
+                            Row(
+                                Modifier.fillMaxSize().background(if (on) C.hex(t.color).copy(alpha = 0.45f) else C.Surface).padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                AsyncImage(model = t.logo, contentDescription = null, modifier = Modifier.size(44.dp))
+                                Spacer(Modifier.width(10.dp))
+                                Text(t.name, color = C.Text, fontSize = 14.sp, maxLines = 2, modifier = Modifier.weight(1f))
+                                if (on) Text("★", color = C.Gold, fontSize = 18.sp)
+                            }
                         }
                     }
                 }

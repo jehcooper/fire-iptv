@@ -20,14 +20,43 @@ object EspnClient {
 
     suspend fun scoreboard(league: League): List<Game> = try {
         if (league.kind == LeagueKind.CRICKET) cricket(league) else {
-            val root = Net.getJson("$SITE/${league.path}/scoreboard").obj()
+            val q = if (league.query.isBlank()) "" else "?${league.query}"
+            val root = Net.getJson("$SITE/${league.path}/scoreboard$q").obj()
             root?.get("events").arr()?.mapNotNull { it.obj() }?.flatMap { parseEvent(league, it) } ?: emptyList()
         }
     } catch (e: Exception) { emptyList() }
 
+    /**
+     * Every FBS conference with its teams, from ESPN's standings feed (one request).
+     * Returns null if the feed can't be read, so callers keep the fallback list.
+     */
+    suspend fun fbsConferences(): List<Conference>? = try {
+        val root = Net.getJson("https://site.api.espn.com/apis/v2/sports/football/college-football/standings?group=80").obj()
+        val out = root?.get("children").arr()?.mapNotNull { it.obj() }?.mapNotNull { ch ->
+            val id = ch.s("id") ?: ch.s("uid")?.let { Regex("g:(\\d+)").find(it)?.groupValues?.get(1) } ?: return@mapNotNull null
+            // Teams can sit directly under the conference or under its divisions.
+            val groups = listOf(ch) + (ch["children"].arr()?.mapNotNull { it.obj() } ?: emptyList())
+            val teams = groups.flatMap { g ->
+                g["standings"].obj()?.get("entries").arr()?.mapNotNull { it.obj()?.get("team").obj() } ?: emptyList()
+            }.mapNotNull { t ->
+                Team(
+                    leagueId = "ncaaf",
+                    id = t.s("id") ?: return@mapNotNull null,
+                    name = t.s("displayName") ?: t.s("name") ?: "",
+                    abbr = t.s("abbreviation") ?: "",
+                    logo = t["logos"].arr()?.firstOrNull().obj()?.s("href"),
+                    color = t.s("color"),
+                )
+            }.distinctBy { it.id }.sortedBy { it.name }
+            Conference(id, ch.s("name") ?: "Conference", ch.s("abbreviation") ?: ch.s("shortName") ?: ch.s("name") ?: id, teams)
+        }
+        out?.takeIf { it.isNotEmpty() }
+    } catch (e: Exception) { null }
+
     suspend fun teams(league: League): List<Team> = try {
         if (league.kind != LeagueKind.TEAM) emptyList() else {
-            val root = Net.getJson("$SITE/${league.path}/teams").obj()
+            val q = if (league.id == "ncaaf") "?groups=80&limit=1000" else "?limit=1000"
+            val root = Net.getJson("$SITE/${league.path}/teams$q").obj()
             root?.get("sports").arr()?.firstOrNull().obj()?.get("leagues").arr()?.firstOrNull().obj()
                 ?.get("teams").arr()?.mapNotNull { it.obj()?.get("team").obj() }?.mapNotNull { t ->
                     Team(

@@ -47,8 +47,8 @@ fun HomeScreen(goTo: (Tab) -> Unit) {
         return
     }
 
-    val allGames = board.values.flatten()
-    val mine = allGames.filter { g -> g.id in followed || g.competitors.any { "${g.leagueId}|${it.id}" in favTeams } }
+    val allGames = board.values.flatten().distinctBy { it.id }
+    val mine = allGames.filter { g -> g.id in followed || g.competitors.any { app.sideline.tv.sports.Leagues.teamKey(g.leagueId, it.id) in favTeams } }
         .sortedWith(compareBy({ !it.isLive }, { it.isFinal }, { it.startMillis }))
     val liveNow = allGames.filter { it.isLive && it !in mine }.take(15)
     val byKey = channels.associateBy { it.key }

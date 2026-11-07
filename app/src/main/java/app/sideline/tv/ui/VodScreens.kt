@@ -46,6 +46,8 @@ import app.sideline.tv.SidelineApp
 import app.sideline.tv.data.Category
 import app.sideline.tv.data.Episode
 import app.sideline.tv.data.Movie
+import app.sideline.tv.data.MovieInfo
+import app.sideline.tv.data.MovieInfoService
 import app.sideline.tv.data.Series
 import app.sideline.tv.player.Play
 import coil.compose.AsyncImage
@@ -120,7 +122,7 @@ private fun DetailSheet(image: String?, onDismiss: () -> Unit, content: @Composa
     Box(Modifier.fillMaxSize().background(C.Bg)) {
         AsyncImage(model = image, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize(), alpha = 0.25f)
         Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(listOf(C.Bg, C.Bg.copy(alpha = 0.85f), Color.Transparent))))
-        Column(Modifier.fillMaxHeight().width(760.dp).padding(start = 64.dp, top = 48.dp, end = 24.dp)) { content() }
+        Column(Modifier.fillMaxHeight().width(900.dp).padding(start = 64.dp, top = 48.dp, end = 24.dp)) { content() }
     }
     }
 }
@@ -128,22 +130,36 @@ private fun DetailSheet(image: String?, onDismiss: () -> Unit, content: @Composa
 @Composable
 private fun MovieSheet(m: Movie, onDismiss: () -> Unit) {
     val ctx = LocalContext.current
-    var plot by remember { mutableStateOf<String?>(null) }
+    var info by remember { mutableStateOf<MovieInfo?>(null) }
     val play = remember { FocusRequester() }
-    LaunchedEffect(m.key) {
-        plot = SidelineApp.repo.client(m.accountId)?.moviePlot(m.streamId)
-    }
+    LaunchedEffect(m.key) { info = MovieInfoService.get(m) }
     LaunchedEffect(Unit) {
         delay(200)
         try { play.requestFocus() } catch (_: Exception) {}
     }
-    DetailSheet(m.poster, onDismiss) {
-        Text(m.name, color = C.Text, fontSize = 34.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(12.dp))
-        Text(plot ?: "", color = C.Muted, fontSize = 16.sp, maxLines = 8, overflow = TextOverflow.Ellipsis)
-        Spacer(Modifier.height(24.dp))
-        Chip("▶ Play", selected = true, onClick = { Play.movie(ctx, m) }, modifier = Modifier.focusRequester(play))
-        Text("Picks up where you left off.", color = C.Faint, fontSize = 13.sp, modifier = Modifier.padding(top = 10.dp))
+    val i = info
+    DetailSheet(i?.backdrop ?: m.poster, onDismiss) {
+        Row {
+            AsyncImage(model = i?.poster ?: m.poster, contentDescription = null, contentScale = ContentScale.Crop,
+                modifier = Modifier.size(width = 180.dp, height = 270.dp))
+            Spacer(Modifier.width(28.dp))
+            Column(Modifier.weight(1f)) {
+                Text(i?.title ?: MovieInfoService.cleanTitle(m.name).first, color = C.Text, fontSize = 34.sp, fontWeight = FontWeight.Bold, maxLines = 2)
+                if (i == null) {
+                    Text("Looking up details…", color = C.Muted, fontSize = 15.sp, modifier = Modifier.padding(top = 10.dp))
+                } else {
+                    if (i.metaLine.isNotBlank()) Text(i.metaLine, color = C.Accent, fontSize = 15.sp, modifier = Modifier.padding(top = 6.dp))
+                    Text(i.plot.ifBlank { "No description found for this title." }, color = C.Text, fontSize = 16.sp,
+                        maxLines = 9, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 14.dp))
+                    if (i.director.isNotBlank()) Text("Director: ${i.director}", color = C.Muted, fontSize = 14.sp, maxLines = 1, modifier = Modifier.padding(top = 12.dp))
+                    if (i.cast.isNotBlank()) Text("Cast: ${i.cast}", color = C.Muted, fontSize = 14.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    if (i.plotSource.isNotBlank()) Text(i.plotSource, color = C.Faint, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
+                }
+                Spacer(Modifier.height(22.dp))
+                Chip("▶ Play", selected = true, onClick = { Play.movie(ctx, m) }, modifier = Modifier.focusRequester(play))
+                Text("Picks up where you left off.", color = C.Faint, fontSize = 13.sp, modifier = Modifier.padding(top = 10.dp))
+            }
+        }
     }
 }
 
