@@ -2,6 +2,7 @@ package app.sideline.tv.sports
 
 import app.sideline.tv.data.Net
 import app.sideline.tv.data.arr
+import app.sideline.tv.data.b
 import app.sideline.tv.data.obj
 import app.sideline.tv.data.s
 import kotlinx.serialization.json.JsonObject
@@ -153,6 +154,25 @@ object EspnClient {
             competitors = competitors,
             broadcasts = broadcasts.distinct(),
             lastScoring = lastScoring,
+            situation = if (league.path.startsWith("football")) parseSituation(c["situation"].obj()) else null,
+        )
+    }
+
+    /** Football "situation" block: down & distance, possession and spot (e.g. possessionText "MIZ 35"). */
+    private fun parseSituation(o: JsonObject?): Situation? {
+        if (o == null) return null
+        val dd = o.s("downDistanceText") ?: o.s("shortDownDistanceText") ?: ""
+        val spot = o.s("possessionText") ?: ""
+        val m = Regex("^([A-Za-z&.' ]+?)\\s+(\\d{1,2})$").find(spot.trim())
+        val lastPlay = o["lastPlay"].obj()?.s("text") ?: ""
+        if (dd.isBlank() && spot.isBlank() && lastPlay.isBlank()) return null
+        return Situation(
+            downDistance = dd,
+            possessionTeamId = o.s("possession"),
+            territory = m?.groupValues?.get(1)?.trim(),
+            yardLine = m?.groupValues?.get(2)?.toIntOrNull() ?: if (spot.trim().equals("50", true)) 50 else null,
+            redZone = o.b("isRedZone"),
+            lastPlay = lastPlay,
         )
     }
 

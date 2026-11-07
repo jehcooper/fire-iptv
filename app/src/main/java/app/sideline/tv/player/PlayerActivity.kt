@@ -76,6 +76,8 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import app.sideline.tv.sports.Leagues
+import app.sideline.tv.sports.Situation
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.focus.FocusRequester
@@ -592,7 +594,7 @@ class PlayerActivity : ComponentActivity() {
                 Column(
                     Modifier.fillMaxWidth()
                         .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xE6000000), Color(0xF2000000))))
-                        .padding(start = 56.dp, end = 56.dp, top = 80.dp, bottom = if (prefs.pinnedGames.value.isEmpty()) 36.dp else (36 + 62 * ((prefs.pinnedGames.value.size + 2) / 3)).dp),
+                        .padding(start = 56.dp, end = 56.dp, top = 80.dp, bottom = if (prefs.pinnedGames.value.isEmpty()) 36.dp else (36 + 84 * ((prefs.pinnedGames.value.size + 2) / 3)).dp),
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         current?.logo?.let { if (live) AsyncImage(model = it, contentDescription = null, modifier = Modifier.size(width = 96.dp, height = 54.dp)) }
@@ -653,30 +655,86 @@ class PlayerActivity : ComponentActivity() {
                 horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                games.forEach { g ->
-                    Row(
-                        Modifier.clip(RoundedCornerShape(10.dp)).background(Color(0xE6131A22)).padding(horizontal = 12.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        if (g.isLive) { Box(Modifier.size(8.dp).clip(CircleShape).background(C.Live)); Spacer(Modifier.width(8.dp)) }
-                        if (g.competitors.size == 2) {
-                            g.competitors.sortedBy { it.home }.forEachIndexed { i, c ->
-                                if (i == 1) Text("–", color = C.Faint, fontSize = 16.sp, modifier = Modifier.padding(horizontal = 6.dp))
-                                AsyncImage(model = c.logo, contentDescription = null, modifier = Modifier.size(22.dp))
-                                Spacer(Modifier.width(4.dp))
-                                Text(c.abbr.ifBlank { c.shortName.take(10) }, color = C.Text, fontSize = 14.sp)
-                                if (g.state != "pre") {
-                                    Spacer(Modifier.width(6.dp))
-                                    Text(if (spoilerFree) "•" else c.score, color = C.Text, fontSize = 17.sp, fontWeight = FontWeight.Bold)
-                                }
-                            }
-                        } else {
-                            Text(g.title, color = C.Text, fontSize = 14.sp, maxLines = 1)
+                games.forEach { g -> TickerChip(g, spoilerFree) }
+            }
+        }
+    }
+
+    /** One pinned game: league tag, score, clock — plus down, distance and a mini field for live football. */
+    @Composable
+    private fun TickerChip(g: Game, spoilerFree: Boolean) {
+        val league = Leagues.byId(g.leagueId)
+        val sit = g.situation
+        Column(Modifier.clip(RoundedCornerShape(10.dp)).background(Color(0xE6131A22)).padding(horizontal = 12.dp, vertical = 8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(league?.tag ?: "", color = C.Accent, fontSize = 11.sp, fontWeight = FontWeight.Bold,
+                    modifier = Modifier.clip(RoundedCornerShape(4.dp)).background(Color(0x332EE59D)).padding(horizontal = 5.dp, vertical = 1.dp))
+                Spacer(Modifier.width(8.dp))
+                if (g.isLive) { Box(Modifier.size(8.dp).clip(CircleShape).background(C.Live)); Spacer(Modifier.width(8.dp)) }
+                if (g.competitors.size == 2) {
+                    g.competitors.sortedBy { it.home }.forEachIndexed { i, c ->
+                        if (i == 1) Text("–", color = C.Faint, fontSize = 16.sp, modifier = Modifier.padding(horizontal = 6.dp))
+                        AsyncImage(model = c.logo, contentDescription = null, modifier = Modifier.size(22.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(c.abbr.ifBlank { c.shortName.take(10) }, color = C.Text, fontSize = 14.sp)
+                        if (g.isLive && sit?.possessionTeamId != null && sit.possessionTeamId == c.id) Text(" 🏈", fontSize = 12.sp)
+                        if (g.state != "pre") {
+                            Spacer(Modifier.width(6.dp))
+                            Text(if (spoilerFree) "•" else c.score, color = C.Text, fontSize = 17.sp, fontWeight = FontWeight.Bold)
                         }
-                        Spacer(Modifier.width(10.dp))
-                        Text(if (g.state == "pre" && g.startMillis > 0) timeOf(g.startMillis) else g.detail, color = C.Muted, fontSize = 12.sp, maxLines = 1)
                     }
+                } else {
+                    Text(g.title, color = C.Text, fontSize = 14.sp, maxLines = 1)
                 }
+                Spacer(Modifier.width(10.dp))
+                Text(if (g.state == "pre" && g.startMillis > 0) timeOf(g.startMillis) else g.detail, color = C.Muted, fontSize = 12.sp, maxLines = 1)
+            }
+            if (g.isLive && sit != null && (sit.downDistance.isNotBlank() || sit.yardLine != null) && !spoilerFree) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 6.dp)) {
+                    FieldBar(g, sit)
+                    Spacer(Modifier.width(10.dp))
+                    Text(sit.downDistance, color = if (sit.redZone) C.Live else C.Text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                }
+            }
+        }
+    }
+
+    /**
+     * Mini football field: away team's end zone on the left, home on the right.
+     * White dot = ball, arrow = direction of the drive, red tint inside the 20.
+     */
+    @Composable
+    private fun FieldBar(g: Game, sit: Situation) {
+        val away = g.away
+        val home = g.home
+        val fromLeft: Int? = sit.yardLine?.let { y ->
+            when {
+                y == 50 -> 50
+                sit.territory != null && away != null && sit.territory.equals(away.abbr, true) -> y
+                sit.territory != null && home != null && sit.territory.equals(home.abbr, true) -> 100 - y
+                else -> null
+            }
+        }
+        val awayHasBall = sit.possessionTeamId != null && sit.possessionTeamId == away?.id
+        val width = 170.dp
+        Box(Modifier.width(width).height(14.dp).clip(RoundedCornerShape(3.dp)).background(Color(0xFF1E5C33))) {
+            // end zones in team colours
+            Box(Modifier.width(width * 0.08f).fillMaxHeight().background(C.hex(away?.color, Color(0xFF2B3A48))))
+            Box(Modifier.width(width * 0.08f).fillMaxHeight().align(Alignment.CenterEnd).background(C.hex(home?.color, Color(0xFF2B3A48))))
+            // midfield line
+            Box(Modifier.width(1.dp).fillMaxHeight().align(Alignment.Center).background(Color(0x66FFFFFF)))
+            if (sit.redZone) {
+                val left = awayHasBall.not() // home attacking left end zone
+                Box(Modifier.width(width * 0.18f).fillMaxHeight().align(if (left) Alignment.CenterStart else Alignment.CenterEnd)
+                    .background(Color(0x55FF4D5E)))
+            }
+            if (fromLeft != null) {
+                val x = width * 0.08f + (width * 0.84f) * (fromLeft / 100f)
+                Text(
+                    if (awayHasBall) "●▸" else "◂●",
+                    color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold,
+                    modifier = Modifier.align(Alignment.CenterStart).offset(x = x - (if (awayHasBall) 4.dp else 12.dp)),
+                )
             }
         }
     }
@@ -831,6 +889,11 @@ class PlayerActivity : ComponentActivity() {
                     Text(g.competitors.sortedBy { it.home }.joinToString(" – ") { it.score }, color = C.Text, fontSize = 18.sp, fontWeight = FontWeight.Bold)
             }
             Text(if (g.state == "pre" && g.startMillis > 0) "Starts ${timeOf(g.startMillis)}" else g.detail, color = C.Muted, fontSize = 13.sp)
+            val sit = g.situation
+            if (g.isLive && sit != null && !prefs.spoilerFree.value) {
+                if (sit.downDistance.isNotBlank()) Text(sit.downDistance, color = if (sit.redZone) C.Live else C.Text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                if (sit.lastPlay.isNotBlank()) Text("Last play: ${sit.lastPlay}", color = C.Faint, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
                 Chip("▶ Watch", true, onClick = { watchGame(g) }, modifier = watchModifier)
                 Chip(if (g.id in pinned) "📌 Unpin" else "📌 Pin", g.id in pinned, onClick = { prefs.togglePin(g.id) })
