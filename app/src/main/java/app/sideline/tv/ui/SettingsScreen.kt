@@ -1,6 +1,5 @@
 package app.sideline.tv.ui
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -47,7 +46,10 @@ import app.sideline.tv.data.XtreamClient
 import app.sideline.tv.sports.LeagueKind
 import app.sideline.tv.sports.Leagues
 import coil.compose.AsyncImage
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import java.util.UUID
 
 @Composable
@@ -155,7 +157,7 @@ fun SettingsScreen() {
 }
 
 @Composable
-private fun Field(label: String, value: String, onChange: (String) -> Unit, secret: Boolean = false) {
+private fun Field(label: String, value: String, onChange: (String) -> Unit, secret: Boolean = false, modifier: Modifier = Modifier) {
     OutlinedTextField(
         value = value, onValueChange = onChange, singleLine = true,
         label = { Text(label) },
@@ -165,7 +167,7 @@ private fun Field(label: String, value: String, onChange: (String) -> Unit, secr
             focusedTextColor = C.Text, unfocusedTextColor = C.Text, cursorColor = C.Accent,
             focusedLabelColor = C.Accent, unfocusedLabelColor = C.Muted,
         ),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
     )
 }
 
@@ -176,7 +178,9 @@ private fun AccountEditor(start: Account, isNew: Boolean, onDone: () -> Unit) {
     var status by remember { mutableStateOf<AccountStatus?>(null) }
     var testing by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    BackHandler { onDone() }
+    val firstField = remember { FocusRequester() }
+    LaunchedEffect(Unit) { delay(200); try { firstField.requestFocus() } catch (_: Exception) {} }
+    TvDialog(onDone) {
 
     Box(Modifier.fillMaxSize().background(C.Bg.copy(alpha = 0.96f)), contentAlignment = Alignment.Center) {
         LazyColumn(
@@ -184,7 +188,7 @@ private fun AccountEditor(start: Account, isNew: Boolean, onDone: () -> Unit) {
             contentPadding = PaddingValues(32.dp), verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             item { Text(if (isNew) "Add IPTV account" else "Edit ${start.name}", color = C.Text, fontSize = 24.sp, fontWeight = FontWeight.Bold) }
-            item { Field("Nickname (e.g. Live TV, Movies)", a.name, { a = a.copy(name = it) }) }
+            item { Field("Nickname (e.g. Live TV, Movies)", a.name, { a = a.copy(name = it) }, modifier = Modifier.focusRequester(firstField)) }
             item { Field("Server address (e.g. http://example.com:8080)", a.server, { a = a.copy(server = it.trim()) }) }
             item { Field("Username", a.username, { a = a.copy(username = it.trim()) }) }
             item { Field("Password", a.password, { a = a.copy(password = it.trim()) }, secret = true) }
@@ -239,6 +243,7 @@ private fun AccountEditor(start: Account, isNew: Boolean, onDone: () -> Unit) {
             }
         }
     }
+    }
 }
 
 @Composable
@@ -248,7 +253,7 @@ private fun TeamPicker(leagueId: String, onDone: () -> Unit) {
     val fav by prefs.favTeams.collectAsState()
     val league = Leagues.byId(leagueId)
     LaunchedEffect(leagueId) { SidelineApp.scores.loadTeams(leagueId) }
-    BackHandler { onDone() }
+    TvDialog(onDone) {
     Box(Modifier.fillMaxSize().background(C.Bg)) {
         Column(Modifier.fillMaxSize().padding(start = 48.dp, end = 48.dp, top = 32.dp)) {
             Text("${league?.name ?: ""} teams", color = C.Text, fontSize = 26.sp, fontWeight = FontWeight.Bold)
@@ -277,5 +282,6 @@ private fun TeamPicker(leagueId: String, onDone: () -> Unit) {
                 }
             }
         }
+    }
     }
 }

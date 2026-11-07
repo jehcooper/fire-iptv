@@ -1,6 +1,5 @@
 package app.sideline.tv.ui
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -50,6 +49,7 @@ import app.sideline.tv.data.Movie
 import app.sideline.tv.data.Series
 import app.sideline.tv.player.Play
 import coil.compose.AsyncImage
+import kotlinx.coroutines.delay
 
 private const val ALL = "__all"
 private const val FIND = "__search"
@@ -116,11 +116,12 @@ fun MoviesScreen() {
 
 @Composable
 private fun DetailSheet(image: String?, onDismiss: () -> Unit, content: @Composable () -> Unit) {
-    BackHandler { onDismiss() }
+    TvDialog(onDismiss) {
     Box(Modifier.fillMaxSize().background(C.Bg)) {
         AsyncImage(model = image, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize(), alpha = 0.25f)
         Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(listOf(C.Bg, C.Bg.copy(alpha = 0.85f), Color.Transparent))))
         Column(Modifier.fillMaxHeight().width(760.dp).padding(start = 64.dp, top = 48.dp, end = 24.dp)) { content() }
+    }
     }
 }
 
@@ -130,8 +131,11 @@ private fun MovieSheet(m: Movie, onDismiss: () -> Unit) {
     var plot by remember { mutableStateOf<String?>(null) }
     val play = remember { FocusRequester() }
     LaunchedEffect(m.key) {
-        try { play.requestFocus() } catch (_: Exception) {}
         plot = SidelineApp.repo.client(m.accountId)?.moviePlot(m.streamId)
+    }
+    LaunchedEffect(Unit) {
+        delay(200)
+        try { play.requestFocus() } catch (_: Exception) {}
     }
     DetailSheet(m.poster, onDismiss) {
         Text(m.name, color = C.Text, fontSize = 34.sp, fontWeight = FontWeight.Bold)

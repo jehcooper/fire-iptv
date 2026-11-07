@@ -51,6 +51,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import app.sideline.tv.SidelineApp
 import app.sideline.tv.sports.AlertKind
 import app.sideline.tv.sports.Game
@@ -257,4 +259,16 @@ fun EmptyState(title: String, body: String, modifier: Modifier = Modifier) {
 @Composable
 fun SidePanel(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     Box(modifier.fillMaxHeight().background(C.Surface)) { content() }
+}
+
+/**
+ * Full-screen panel in its own window, so the remote's focus stays inside it until Back is pressed.
+ * (Drawing panels on top of a screen let focus leak to the screen underneath.)
+ */
+@Composable
+fun TvDialog(onDismiss: () -> Unit, content: @Composable () -> Unit) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
+    ) { content() }
 }

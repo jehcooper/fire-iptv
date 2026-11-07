@@ -1,6 +1,5 @@
 package app.sideline.tv.ui
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -47,6 +46,7 @@ import app.sideline.tv.sports.Game
 import app.sideline.tv.sports.GameMatcher
 import app.sideline.tv.sports.Leagues
 import coil.compose.AsyncImage
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
@@ -112,8 +112,8 @@ fun GameSheet(game: Game, onDismiss: () -> Unit) {
     val first = remember { FocusRequester() }
     val live = SidelineApp.scores.game(game.id) ?: game
 
-    BackHandler { onDismiss() }
-    LaunchedEffect(Unit) { try { first.requestFocus() } catch (_: Exception) {} }
+    TvDialog(onDismiss) {
+    LaunchedEffect(Unit) { delay(200); try { first.requestFocus() } catch (_: Exception) {} }
 
     Box(Modifier.fillMaxSize().background(Color(0xCC000000)), contentAlignment = Alignment.CenterEnd) {
         Column(
@@ -194,5 +194,6 @@ fun GameSheet(game: Game, onDismiss: () -> Unit) {
                 }
             }
         }
+    }
     }
 }
