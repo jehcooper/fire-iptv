@@ -87,6 +87,9 @@ import app.sideline.tv.sports.Game
 import app.sideline.tv.sports.GameMatcher
 import app.sideline.tv.sports.ScoreAlert
 import app.sideline.tv.ui.Chip
+import app.sideline.tv.ui.LiveDetailsFull
+import app.sideline.tv.ui.LiveStrip
+import app.sideline.tv.ui.hasLiveStrip
 import app.sideline.tv.ui.TvDialog
 import app.sideline.tv.ui.C
 import app.sideline.tv.ui.Pill
@@ -678,6 +681,7 @@ class PlayerActivity : ComponentActivity() {
                         Spacer(Modifier.width(4.dp))
                         Text(c.abbr.ifBlank { c.shortName.take(10) }, color = C.Text, fontSize = 14.sp)
                         if (g.isLive && sit?.possessionTeamId != null && sit.possessionTeamId == c.id) Text(" 🏈", fontSize = 12.sp)
+                        g.soccer?.let { sc -> val reds = if (c.home) sc.redHome else sc.redAway; if (reds > 0) Text(" " + "🟥".repeat(reds), fontSize = 11.sp) }
                         if (g.state != "pre") {
                             Spacer(Modifier.width(6.dp))
                             Text(if (spoilerFree) "•" else c.score, color = C.Text, fontSize = 17.sp, fontWeight = FontWeight.Bold)
@@ -689,52 +693,9 @@ class PlayerActivity : ComponentActivity() {
                 Spacer(Modifier.width(10.dp))
                 Text(if (g.state == "pre" && g.startMillis > 0) timeOf(g.startMillis) else g.detail, color = C.Muted, fontSize = 12.sp, maxLines = 1)
             }
-            if (g.isLive && sit != null && (sit.downDistance.isNotBlank() || sit.yardLine != null) && !spoilerFree) {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 6.dp)) {
-                    FieldBar(g, sit)
-                    Spacer(Modifier.width(10.dp))
-                    Text(sit.downDistance, color = if (sit.redZone) C.Live else C.Text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
-                }
-            }
-        }
-    }
-
-    /**
-     * Mini football field: away team's end zone on the left, home on the right.
-     * White dot = ball, arrow = direction of the drive, red tint inside the 20.
-     */
-    @Composable
-    private fun FieldBar(g: Game, sit: Situation) {
-        val away = g.away
-        val home = g.home
-        val fromLeft: Int? = sit.yardLine?.let { y ->
-            when {
-                y == 50 -> 50
-                sit.territory != null && away != null && sit.territory.equals(away.abbr, true) -> y
-                sit.territory != null && home != null && sit.territory.equals(home.abbr, true) -> 100 - y
-                else -> null
-            }
-        }
-        val awayHasBall = sit.possessionTeamId != null && sit.possessionTeamId == away?.id
-        val width = 170.dp
-        Box(Modifier.width(width).height(14.dp).clip(RoundedCornerShape(3.dp)).background(Color(0xFF1E5C33))) {
-            // end zones in team colours
-            Box(Modifier.width(width * 0.08f).fillMaxHeight().background(C.hex(away?.color, Color(0xFF2B3A48))))
-            Box(Modifier.width(width * 0.08f).fillMaxHeight().align(Alignment.CenterEnd).background(C.hex(home?.color, Color(0xFF2B3A48))))
-            // midfield line
-            Box(Modifier.width(1.dp).fillMaxHeight().align(Alignment.Center).background(Color(0x66FFFFFF)))
-            if (sit.redZone) {
-                val left = awayHasBall.not() // home attacking left end zone
-                Box(Modifier.width(width * 0.18f).fillMaxHeight().align(if (left) Alignment.CenterStart else Alignment.CenterEnd)
-                    .background(Color(0x55FF4D5E)))
-            }
-            if (fromLeft != null) {
-                val x = width * 0.08f + (width * 0.84f) * (fromLeft / 100f)
-                Text(
-                    if (awayHasBall) "●▸" else "◂●",
-                    color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold,
-                    modifier = Modifier.align(Alignment.CenterStart).offset(x = x - (if (awayHasBall) 4.dp else 12.dp)),
-                )
+            // Second line: football field / hockey shots & power play / soccer possession, plus win probability.
+            if (hasLiveStrip(g) && !spoilerFree) {
+                Box(Modifier.padding(top = 6.dp)) { LiveStrip(g) }
             }
         }
     }
@@ -889,11 +850,7 @@ class PlayerActivity : ComponentActivity() {
                     Text(g.competitors.sortedBy { it.home }.joinToString(" – ") { it.score }, color = C.Text, fontSize = 18.sp, fontWeight = FontWeight.Bold)
             }
             Text(if (g.state == "pre" && g.startMillis > 0) "Starts ${timeOf(g.startMillis)}" else g.detail, color = C.Muted, fontSize = 13.sp)
-            val sit = g.situation
-            if (g.isLive && sit != null && !prefs.spoilerFree.value) {
-                if (sit.downDistance.isNotBlank()) Text(sit.downDistance, color = if (sit.redZone) C.Live else C.Text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                if (sit.lastPlay.isNotBlank()) Text("Last play: ${sit.lastPlay}", color = C.Faint, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            }
+            if (!prefs.spoilerFree.value) LiveDetailsFull(g)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
                 Chip("▶ Watch", true, onClick = { watchGame(g) }, modifier = watchModifier)
                 Chip(if (g.id in pinned) "📌 Unpin" else "📌 Pin", g.id in pinned, onClick = { prefs.togglePin(g.id) })

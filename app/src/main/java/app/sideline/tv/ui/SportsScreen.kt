@@ -200,6 +200,7 @@ fun GameSheet(game: Game, onDismiss: () -> Unit) {
         Box(Modifier.fillMaxSize().background(Color(0xCC000000)), contentAlignment = Alignment.CenterEnd) {
             Column(Modifier.fillMaxHeight().width(600.dp).background(C.Surface).padding(36.dp)) {
                 ScoreHeader(live, spoilerFree)
+                if (!spoilerFree) LiveDetailsFull(live)
                 Spacer(Modifier.height(16.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Chip(if (live.id in followed) "🔔 Pop-ups on" else "🔕 Pop-ups off", live.id in followed,

@@ -97,6 +97,11 @@ data class Game(
     val lastScoring: String = "",
     /** Live football: down & distance, ball position, possession (like ESPN Gamecast). */
     val situation: Situation? = null,
+    /** Home team's chance of winning, 0–1, when ESPN publishes it; and the previous value, for the ▲▼ arrow. */
+    val homeWinPct: Double? = null,
+    val prevHomeWinPct: Double? = null,
+    val soccer: SoccerInfo? = null,
+    val hockey: HockeyInfo? = null,
 ) {
     val isLive get() = state == "in"
     val isFinal get() = state == "post"
@@ -118,4 +123,28 @@ data class Situation(
     val yardLine: Int?,
     val redZone: Boolean,
     val lastPlay: String,
+)
+
+data class GoalEvent(val minute: String, val scorer: String, val assist: String?, val home: Boolean, val kind: String)
+
+data class SoccerInfo(
+    val possAway: Double?, val possHome: Double?,
+    val shotsAway: Int?, val shotsHome: Int?,
+    val onTargetAway: Int?, val onTargetHome: Int?,
+    val cornersAway: Int?, val cornersHome: Int?,
+    val redAway: Int, val redHome: Int,
+    val goals: List<GoalEvent>,
+)
+
+/** From the NHL's own live feed: shots on goal and the on-ice situation. */
+data class HockeyInfo(
+    val sogAway: Int?, val sogHome: Int?,
+    /** Team on the power play (ESPN-style abbreviation of that side: "away"/"home"), e.g. "home". */
+    val ppSide: String?,
+    /** e.g. "5v4", "5v3", "4v4", "6v5" */
+    val strength: String?,
+    /** Time left on the power play, e.g. "1:24", when the NHL feed has it. */
+    val ppTime: String?,
+    /** "away"/"home" side whose goalie is pulled. */
+    val emptyNetSide: String?,
 )

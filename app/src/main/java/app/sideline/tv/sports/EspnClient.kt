@@ -155,7 +155,48 @@ object EspnClient {
             broadcasts = broadcasts.distinct(),
             lastScoring = lastScoring,
             situation = if (league.path.startsWith("football")) parseSituation(c["situation"].obj()) else null,
+            homeWinPct = c["situation"].obj()?.get("lastPlay").obj()?.get("probability").obj()?.s("homeWinPercentage")?.toDoubleOrNull()
+                ?: c["situation"].obj()?.get("probability").obj()?.s("homeWinPercentage")?.toDoubleOrNull(),
+            soccer = if (league.path.startsWith("soccer")) parseSoccer(c) else null,
         )
+    }
+
+    /** Soccer: possession, shots, corners from competitor statistics; goals and red cards from "details". */
+    private fun parseSoccer(c: JsonObject): SoccerInfo? {
+        val comps = c["competitors"].arr()?.mapNotNull { it.obj() } ?: return null
+        val home = comps.firstOrNull { it.s("homeAway") == "home" } ?: return null
+        val away = comps.firstOrNull { it.s("homeAway") == "away" } ?: return null
+        fun stat(cp: JsonObject, vararg names: String): String? = cp["statistics"].arr()?.mapNotNull { it.obj() }
+            ?.firstOrNull { st -> names.any { it.equals(st.s("name"), true) || it.equals(st.s("abbreviation"), true) } }
+            ?.let { it.s("displayValue") ?: it.s("value") }
+        fun num(v: String?) = v?.removeSuffix("%")?.toDoubleOrNull()
+        val homeId = home["team"].obj()?.s("id")
+        val details = c["details"].arr()?.mapNotNull { it.obj() } ?: emptyList()
+        fun isHome(d: JsonObject) = d["team"].obj()?.s("id") == homeId
+        val reds = details.filter { d -> d.s("redCard") == "true" || (d["type"].obj()?.s("text")?.contains("Red Card", true) == true) }
+        val goals = details.filter { d -> d.s("scoringPlay") == "true" }.map { d ->
+            val who = d["athletesInvolved"].arr()?.mapNotNull { it.obj()?.s("shortName") ?: it.obj()?.s("displayName") } ?: emptyList()
+            GoalEvent(
+                minute = d["clock"].obj()?.s("displayValue") ?: "",
+                scorer = who.firstOrNull() ?: "Goal",
+                assist = who.getOrNull(1),
+                home = isHome(d),
+                kind = when {
+                    d.s("ownGoal") == "true" -> "OG"
+                    d.s("penaltyKick") == "true" -> "pen"
+                    else -> ""
+                },
+            )
+        }
+        val info = SoccerInfo(
+            possAway = num(stat(away, "possessionPct")), possHome = num(stat(home, "possessionPct")),
+            shotsAway = num(stat(away, "totalShots", "shots"))?.toInt(), shotsHome = num(stat(home, "totalShots", "shots"))?.toInt(),
+            onTargetAway = num(stat(away, "shotsOnTarget", "shotsOnGoal"))?.toInt(), onTargetHome = num(stat(home, "shotsOnTarget", "shotsOnGoal"))?.toInt(),
+            cornersAway = num(stat(away, "wonCorners", "cornerKicks"))?.toInt(), cornersHome = num(stat(home, "wonCorners", "cornerKicks"))?.toInt(),
+            redAway = reds.count { !isHome(it) }, redHome = reds.count { isHome(it) },
+            goals = goals,
+        )
+        return info
     }
 
     /** Football "situation" block: down & distance, possession and spot (e.g. possessionText "MIZ 35"). */

@@ -81,7 +81,21 @@ class ScoreWatcher(private val prefs: Prefs) {
         val results = kotlinx.coroutines.coroutineScope {
             leagues.map { l -> async { l.id to EspnClient.scoreboard(l) } }.awaitAll()
         }
-        val map = results.toMap()
+        val pinnedNow = prefs.pinnedGames.value
+        val map = results.toMap().mapValues { (lid, games) ->
+            // Win probability: remember the previous value so the UI can show which way it moved.
+            var list = games.map { g ->
+                val prev = last[g.id]
+                val before = when {
+                    prev == null -> null
+                    prev.homeWinPct != g.homeWinPct -> prev.homeWinPct
+                    else -> prev.prevHomeWinPct
+                }
+                g.copy(prevHomeWinPct = before)
+            }
+            if (lid == "nhl") list = NhlLive.enrich(list, list.filter { it.id in pinnedNow || isWatched(it) }.map { it.id }.toSet())
+            list
+        }
         _board.value = map
         val finished = mutableSetOf<String>()
         // The same game can appear under "College Football" and a conference tab; handle it once.
