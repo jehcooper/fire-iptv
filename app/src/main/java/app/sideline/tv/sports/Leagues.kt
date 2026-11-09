@@ -147,4 +147,8 @@ data class HockeyInfo(
     val ppTime: String?,
     /** "away"/"home" side whose goalie is pulled. */
     val emptyNetSide: String?,
+    /** Latest goal with scorer and assists, e.g. "TOR · Matthews (12) · assists: Marner (20), Nylander (10) · PPG · P2 12:41". */
+    val lastGoal: String? = null,
+    /** How many goals the play-by-play has counted, to tell whether [lastGoal] is up to date. */
+    val goalsCounted: Int = 0,
 )

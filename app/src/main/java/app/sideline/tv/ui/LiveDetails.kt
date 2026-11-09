@@ -123,6 +123,7 @@ fun LiveDetailsFull(g: Game) {
                 }
                 hockeyBadge(g)?.let { (text, color) -> Badge(text, color) }
             }
+            hk.lastGoal?.let { Text("🚨 Last goal: $it", color = C.Muted, fontSize = 13.sp, maxLines = 2) }
         }
         g.soccer?.let { sc ->
             if (sc.possAway != null && sc.possHome != null) {

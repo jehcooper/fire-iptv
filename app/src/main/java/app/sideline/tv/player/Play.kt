@@ -20,6 +20,8 @@ object Play {
             val fromStart: Boolean = false,
             /** For subtitle search: series name + season/episode for episodes. */
             val season: Int? = null, val episode: Int? = null,
+            /** For "Continue watching" on episodes. */
+            val episodeObj: Episode? = null, val seriesId: Int = 0, val seriesCover: String? = null,
         ) : Item()
         data class CatchUp(val channel: Channel, val title: String, val url: String) : Item()
     }
@@ -34,6 +36,13 @@ object Play {
     fun channel(ctx: Context, c: Channel, queue: List<Channel> = listOf(c)) =
         launch(ctx, Item.Live(c, queue.ifEmpty { listOf(c) }))
 
+    /** Watch a past programme from the start (catch-up channels only). */
+    fun catchUp(ctx: Context, c: Channel, item: app.sideline.tv.data.EpgItem) {
+        val minutes = ((item.end - item.start) / 60).toInt().coerceAtLeast(30)
+        val url = SidelineApp.repo.client(c.accountId)?.timeshiftUrl(c, item.startRaw, minutes) ?: return
+        launch(ctx, Item.CatchUp(c, "From the start: ${item.title}", url))
+    }
+
     fun movie(ctx: Context, m: Movie, fromStart: Boolean = false) {
         val url = SidelineApp.repo.client(m.accountId)?.movieUrl(m) ?: return
         launch(ctx, Item.Vod(movieKey(m), m.name, url, movie = m, fromStart = fromStart))
@@ -44,8 +53,17 @@ object Play {
     /** Saved position (ms) for a movie or episode key, 0 if none. */
     fun resumePosition(ctx: Context, key: String): Long = ctx.getSharedPreferences("resume", Context.MODE_PRIVATE).getLong(key, 0L)
 
-    fun episode(ctx: Context, e: Episode, seriesName: String) {
+    fun episode(ctx: Context, e: Episode, seriesName: String, seriesId: Int = 0, seriesCover: String? = null, fromStart: Boolean = false) {
         val url = SidelineApp.repo.client(e.accountId)?.episodeUrl(e) ?: return
-        launch(ctx, Item.Vod("ep:${e.accountId}:${e.id}", seriesName, url, "S${e.season} E${e.number} · ${e.title}", plot = e.plot, image = e.image, season = e.season, episode = e.number))
+        launch(ctx, Item.Vod(episodeKey(e), seriesName, url, "S${e.season} E${e.number} · ${e.title}", plot = e.plot, image = e.image,
+            season = e.season, episode = e.number, episodeObj = e, seriesId = seriesId, seriesCover = seriesCover, fromStart = fromStart))
+    }
+
+    fun episodeKey(e: Episode) = "ep:${e.accountId}:${e.id}"
+
+    /** Pick up a "Continue watching" entry where it was left. */
+    fun resume(ctx: Context, p: app.sideline.tv.data.ProgressEntry) {
+        if (p.kind == "movie") movie(ctx, p.toMovie())
+        else episode(ctx, p.toEpisode(), p.title, p.seriesId, p.image)
     }
 }

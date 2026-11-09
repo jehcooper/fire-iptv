@@ -56,8 +56,12 @@ class ScoreWatcher(private val prefs: Prefs) {
 
     fun refreshNow() { scope.launch { refreshOnce() } }
 
+    /** Recent scoring summaries per game (text, time), shown briefly on pinned scores. */
+    private val _recentScoring = MutableStateFlow<Map<String, Pair<String, Long>>>(emptyMap())
+    val recentScoring: StateFlow<Map<String, Pair<String, Long>>> = _recentScoring
+
     fun isWatched(g: Game): Boolean {
-        if (g.id in prefs.followedGames.value) return true
+        if (g.id in prefs.followedGames.value || g.id in prefs.pinnedGames.value) return true
         if (!prefs.autoFollowTeams.value) return false
         val fav = prefs.favTeams.value
         return g.competitors.any { Leagues.teamKey(g.leagueId, it.id) in fav }
@@ -132,10 +136,18 @@ class ScoreWatcher(private val prefs: Prefs) {
                     (c.score.toDoubleOrNull() ?: 0.0) > (old?.toDoubleOrNull() ?: 0.0)
                 }
                 // Who scored / assisted: soccer has it on the scoreboard; other sports need one extra request.
-                val synopsis = g.lastScoring.takeIf { it.isNotBlank() } ?: Leagues.byId(g.leagueId)?.let { l ->
-                    kotlinx.coroutines.withTimeoutOrNull(6_000) { EspnClient.lastScoringPlay(l, g.id) }
-                } ?: ""
-                _alerts.tryEmit(ScoreAlert(g, AlertKind.SCORE, if (scorer != null) "${scorer.shortName} score!" else "Score update", synopsis))
+                // Look up who scored without holding up the next score refresh.
+                scope.launch {
+                    // NHL: the league's own play-by-play (scorer, assists, PPG/SHG/EN) when it has caught up with the score.
+                    val total = g.competitors.sumOf { it.score.toIntOrNull() ?: 0 }
+                    val nhlGoal = g.hockey?.lastGoal?.takeIf { g.hockey.goalsCounted >= total }
+                        ?: if (g.leagueId == "nhl") NhlLive.freshGoal(g.id, total) else null
+                    val synopsis = nhlGoal ?: g.lastScoring.takeIf { it.isNotBlank() } ?: Leagues.byId(g.leagueId)?.let { l ->
+                        kotlinx.coroutines.withTimeoutOrNull(6_000) { EspnClient.lastScoringPlay(l, g.id) }
+                    } ?: ""
+                    if (synopsis.isNotBlank()) _recentScoring.value = _recentScoring.value + (g.id to (synopsis to System.currentTimeMillis()))
+                    _alerts.tryEmit(ScoreAlert(g, AlertKind.SCORE, if (scorer != null) "${scorer.shortName} score!" else "Score update", synopsis))
+                }
             }
         }
     }

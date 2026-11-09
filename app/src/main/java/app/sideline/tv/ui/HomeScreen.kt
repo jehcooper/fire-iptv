@@ -37,6 +37,7 @@ fun HomeScreen(goTo: (Tab) -> Unit) {
     val recent by prefs.recentChannels.collectAsState()
     val favCh by prefs.favChannels.collectAsState()
     val errors by repo.errors.collectAsState()
+    val progress by SidelineApp.progress.entries.collectAsState()
     var openGame by remember { mutableStateOf<Game?>(null) }
     var openMovie by remember { mutableStateOf<app.sideline.tv.data.Movie?>(null) }
     var openSeries by remember { mutableStateOf<app.sideline.tv.data.Series?>(null) }
@@ -62,6 +63,14 @@ fun HomeScreen(goTo: (Tab) -> Unit) {
         verticalArrangement = Arrangement.spacedBy(28.dp),
     ) {
         if (errors.isNotEmpty()) item { EmptyState("Some content didn't load", errors.joinToString("\n")) }
+        if (progress.isNotEmpty()) item {
+            Column {
+                SectionTitle("Continue watching")
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    items(progress.take(20), key = { it.key }) { p -> ProgressCard(p, onClick = { Play.resume(ctx, p) }) }
+                }
+            }
+        }
         if (mine.isNotEmpty()) item {
             Column {
                 SectionTitle("My Teams & followed games")

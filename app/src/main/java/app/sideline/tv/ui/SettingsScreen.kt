@@ -72,6 +72,10 @@ fun SettingsScreen() {
     val osKey by prefs.osKey.collectAsState()
     val osUser by prefs.osUser.collectAsState()
     var editOs by remember { mutableStateOf(false) }
+    var manageCats by remember { mutableStateOf<String?>(null) }
+    var editTmdb by remember { mutableStateOf(false) }
+    val tmdbKey by prefs.tmdbKey.collectAsState()
+    val hidden by prefs.hiddenCats.collectAsState()
 
     LazyColumn(
         contentPadding = PaddingValues(start = 48.dp, end = 48.dp, top = 16.dp, bottom = 80.dp),
@@ -161,6 +165,29 @@ fun SettingsScreen() {
 
         item {
             Column {
+                SectionTitle("Show or hide categories")
+                Text("Hide categories you never watch. They also drop out of search and \"All\".", color = C.Muted, fontSize = 14.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 8.dp)) {
+                    listOf("live" to "Live TV", "vod" to "Movies", "series" to "Series").forEach { (k, label) ->
+                        val n = hidden.count { it.startsWith("$k:") }
+                        Chip(if (n > 0) "$label ($n hidden)" else label, false, onClick = { manageCats = k })
+                    }
+                }
+            }
+        }
+
+        item {
+            Column {
+                SectionTitle("Movie & series info")
+                Text("Audience ratings (PG-13, TV-MA, 14A…) come from your provider when it has them. Otherwise they come from TMDB, " +
+                    "which needs a free key. TMDB also fills in missing descriptions.", color = C.Muted, fontSize = 14.sp)
+                Spacer(Modifier.height(8.dp))
+                Chip(if (tmdbKey.isBlank()) "Add TMDB key" else "TMDB: key saved", false, onClick = { editTmdb = true })
+            }
+        }
+
+        item {
+            Column {
                 SectionTitle("Subtitles (movies & series)")
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Chip(if (subsOn) "✓ Subtitles on" else "Subtitles off", subsOn, onClick = { prefs.setSubsOn(!subsOn) })
@@ -202,6 +229,8 @@ fun SettingsScreen() {
     editing?.let { a -> AccountEditor(a, isNew = accounts.none { it.id == a.id }, onDone = { editing = null }) }
     teamsFor?.let { id -> TeamPicker(id) { teamsFor = null } }
     if (editOs) OpenSubtitlesEditor { editOs = false }
+    manageCats?.let { k -> CategoryManager(k) { manageCats = null } }
+    if (editTmdb) TmdbEditor { editTmdb = false }
 }
 
 @Composable
@@ -371,6 +400,67 @@ private fun OpenSubtitlesEditor(onDone: () -> Unit) {
                         Chip("Save", true, onClick = { prefs.setOpenSubtitles(key, user, pass); onDone() })
                         Chip("Cancel", false, onClick = onDone)
                     }
+                }
+            }
+        }
+    }
+}
+
+/** Tick/untick categories to show or hide them. */
+@Composable
+private fun CategoryManager(kind: String, onDone: () -> Unit) {
+    val prefs = SidelineApp.prefs
+    val repo = SidelineApp.repo
+    val hidden by prefs.hiddenCats.collectAsState()
+    val cats by when (kind) {
+        "live" -> repo.liveCategories
+        "vod" -> repo.vodCategories
+        else -> repo.seriesCategories
+    }.collectAsState()
+    val first = remember { FocusRequester() }
+    LaunchedEffect(Unit) { delay(200); try { first.requestFocus() } catch (_: Exception) {} }
+    TvDialog(onDone) {
+        Box(Modifier.fillMaxSize().background(C.Bg.copy(alpha = 0.97f))) {
+            Column(Modifier.fillMaxSize().padding(start = 48.dp, end = 48.dp, top = 32.dp)) {
+                Text(when (kind) { "live" -> "Live TV categories"; "vod" -> "Movie categories"; else -> "Series categories" },
+                    color = C.Text, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+                Text("✓ = shown. Select to switch. Back when done.", color = C.Muted, fontSize = 14.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(vertical = 10.dp)) {
+                    Chip("Show all", false, onClick = { prefs.showAllCats("$kind:") }, modifier = Modifier.focusRequester(first))
+                    Chip("Hide all", false, onClick = { cats.forEach { c -> val k = "$kind:${c.accountId}:${c.id}"; if (k !in hidden) prefs.toggleHidden(k) } })
+                }
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(260.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp),
+                    contentPadding = PaddingValues(bottom = 60.dp),
+                ) {
+                    items(cats, key = { "${it.accountId}:${it.id}" }) { c ->
+                        val k = "$kind:${c.accountId}:${c.id}"
+                        val shown = k !in hidden
+                        Chip(if (shown) "✓ ${c.name}" else c.name, shown, onClick = { prefs.toggleHidden(k) })
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TmdbEditor(onDone: () -> Unit) {
+    val prefs = SidelineApp.prefs
+    var key by remember { mutableStateOf(prefs.tmdbKey.value) }
+    val firstField = remember { FocusRequester() }
+    LaunchedEffect(Unit) { delay(200); try { firstField.requestFocus() } catch (_: Exception) {} }
+    TvDialog(onDone) {
+        Box(Modifier.fillMaxSize().background(C.Bg.copy(alpha = 0.96f)), contentAlignment = Alignment.Center) {
+            Column(Modifier.width(720.dp).clip(RoundedCornerShape(18.dp)).background(C.Surface).padding(32.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("TMDB (The Movie Database)", color = C.Text, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                Text("Free key: sign up at themoviedb.org, then Settings → API → create a key (personal use). Paste either the API Key or the API Read Access Token.",
+                    color = C.Muted, fontSize = 14.sp)
+                Field("TMDB API key or Read Access Token", key, { key = it.trim() }, modifier = Modifier.focusRequester(firstField))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Chip("Save", true, onClick = { prefs.setTmdbKey(key); onDone() })
+                    Chip("Cancel", false, onClick = onDone)
                 }
             }
         }

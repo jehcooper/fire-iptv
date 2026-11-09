@@ -70,6 +70,8 @@ data class MovieInfo(
     val poster: String? = null,
     /** Shown as a credit when the description came from outside the provider. */
     val plotSource: String = "",
+    /** Audience rating, e.g. "PG-13", "TV-MA", "14A (CA)". */
+    val certification: String = "",
 ) {
     val metaLine: String get() = listOf(year, genre, runtime, rating.takeIf { it.isNotBlank() }?.let { "★ $it" } ?: "")
         .filter { it.isNotBlank() }.joinToString("  ·  ")

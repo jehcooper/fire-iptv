@@ -9,6 +9,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withPermit
 
 /**
  * Merges every account into one library. Live channels come from accounts marked "live",
@@ -44,6 +45,9 @@ class Repository(private val prefs: Prefs) {
     @Volatile var lowerNames: Map<String, String> = emptyMap(); private set
     @Volatile var normNames: Map<String, String> = emptyMap(); private set
     @Volatile private var byKey: Map<String, Channel> = emptyMap()
+
+    /** At most 6 guide requests at once, so a fast scroll through the TV guide doesn't flood the server. */
+    private val epgGate = kotlinx.coroutines.sync.Semaphore(6)
 
     /** TV guide cache: one fetch per channel serves every game we check for 10 minutes. */
     private val epgCache = java.util.concurrent.ConcurrentHashMap<String, Pair<Long, List<EpgItem>>>()
@@ -115,7 +119,7 @@ class Repository(private val prefs: Prefs) {
     suspend fun epgCached(c: Channel): List<EpgItem> {
         val now = System.currentTimeMillis()
         epgCache[c.key]?.let { (t, items) -> if (now - t < 10 * 60_000) return items }
-        val items = epg(c, 6)
+        val items = epgGate.withPermit { epg(c, 12) }
         epgCache[c.key] = now to items
         return items
     }

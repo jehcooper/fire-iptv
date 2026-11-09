@@ -63,12 +63,14 @@ import app.sideline.tv.SidelineApp
 import app.sideline.tv.data.Channel
 import app.sideline.tv.data.EpgItem
 import app.sideline.tv.data.MovieInfo
+import app.sideline.tv.data.ProgressEntry
 import app.sideline.tv.data.MovieInfoService
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import app.sideline.tv.data.Net
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
@@ -87,6 +89,7 @@ import app.sideline.tv.sports.Game
 import app.sideline.tv.sports.GameMatcher
 import app.sideline.tv.sports.ScoreAlert
 import app.sideline.tv.ui.Chip
+import app.sideline.tv.ui.RatingBadge
 import app.sideline.tv.ui.LiveDetailsFull
 import app.sideline.tv.ui.LiveStrip
 import app.sideline.tv.ui.hasLiveStrip
@@ -564,6 +567,24 @@ class PlayerActivity : ComponentActivity() {
             val dur = player.duration
             val nearEnd = dur > 0 && pos > dur - 5 * 60_000
             getSharedPreferences("resume", MODE_PRIVATE).edit().putLong(k, if (nearEnd) 0L else pos).apply()
+            // "Continue watching" list.
+            val v = vodItem
+            if (v != null && dur > 0) {
+                val m = v.movie
+                val e = v.episodeObj
+                val now = System.currentTimeMillis()
+                when {
+                    m != null -> SidelineApp.progress.update(ProgressEntry(
+                        key = k, kind = "movie", accountId = m.accountId, title = details?.title?.takeIf { it.isNotBlank() } ?: m.name,
+                        image = m.poster, position = pos, duration = dur, updated = now, streamId = m.streamId, ext = m.ext,
+                    ))
+                    e != null -> SidelineApp.progress.update(ProgressEntry(
+                        key = k, kind = "episode", accountId = e.accountId, title = v.title, subtitle = v.subtitle,
+                        image = v.seriesCover ?: e.image, position = pos, duration = dur, updated = now, ext = e.ext,
+                        seriesId = v.seriesId, episodeId = e.id, season = e.season, episode = e.number, plot = e.plot,
+                    ))
+                }
+            }
         }
     }
 
@@ -692,6 +713,13 @@ class PlayerActivity : ComponentActivity() {
                 }
                 Spacer(Modifier.width(10.dp))
                 Text(if (g.state == "pre" && g.startMillis > 0) timeOf(g.startMillis) else g.detail, color = C.Muted, fontSize = 12.sp, maxLines = 1)
+            }
+            // For 2 minutes after a score: who scored and assisted.
+            val recent by SidelineApp.scores.recentScoring.collectAsState()
+            val goal = recent[g.id]?.takeIf { System.currentTimeMillis() - it.second < 120_000 }?.first
+            if (goal != null && !spoilerFree) {
+                Text("🚨 $goal", color = C.Text, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 4.dp).widthIn(max = 520.dp))
             }
             // Second line: football field / hockey shots & power play / soccer possession, plus win probability.
             if (hasLiveStrip(g) && !spoilerFree) {
@@ -876,7 +904,12 @@ class PlayerActivity : ComponentActivity() {
                         Text(if (subtitle.isNotBlank() && d?.title == subtitle) title else (d?.title ?: title),
                             color = C.Text, fontSize = 32.sp, fontWeight = FontWeight.Bold, maxLines = 2)
                         if (subtitle.isNotBlank()) Text(subtitle, color = C.Muted, fontSize = 18.sp)
-                        if (d != null && d.metaLine.isNotBlank()) Text(d.metaLine, color = C.Accent, fontSize = 15.sp, modifier = Modifier.padding(top = 6.dp))
+                        if (d != null && (d.metaLine.isNotBlank() || d.certification.isNotBlank())) {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 6.dp)) {
+                                if (d.certification.isNotBlank()) { RatingBadge(d.certification); Spacer(Modifier.width(10.dp)) }
+                                Text(d.metaLine, color = C.Accent, fontSize = 15.sp)
+                            }
+                        }
                         Text(
                             when {
                                 d == null -> "Looking up details…"

@@ -29,6 +29,16 @@ class Prefs(context: Context) {
     private val _followed = MutableStateFlow(sp.getStringSet("followed", emptySet())!!.toSet())
     val followedGames: StateFlow<Set<String>> = _followed
 
+    /** Hidden categories: "live:acc:cat", "vod:acc:cat", "series:acc:cat". */
+    private val _hiddenCats = MutableStateFlow(sp.getStringSet("hiddenCats", emptySet())!!.toSet())
+    val hiddenCats: StateFlow<Set<String>> = _hiddenCats
+    fun toggleHidden(key: String) = toggle(_hiddenCats, "hiddenCats", key)
+    fun showAllCats(prefix: String) {
+        val s = _hiddenCats.value.filterNot { it.startsWith(prefix) }.toSet()
+        _hiddenCats.value = s
+        sp.edit().putStringSet("hiddenCats", s).apply()
+    }
+
     /** Games pinned to the bottom of the screen while watching. */
     private val _pinned = MutableStateFlow(sp.getStringSet("pinned", emptySet())!!.toSet())
     val pinnedGames: StateFlow<Set<String>> = _pinned
@@ -55,6 +65,10 @@ class Prefs(context: Context) {
     val osUser: StateFlow<String> = _osUser
     private val _osPass = str("osPass", "")
     val osPass: StateFlow<String> = _osPass
+
+    private val _tmdbKey = str("tmdbKey", "")
+    val tmdbKey: StateFlow<String> = _tmdbKey
+    fun setTmdbKey(v: String) { _tmdbKey.value = v.trim(); sp.edit().putString("tmdbKey", v.trim()).apply() }
 
     fun setSubsOn(v: Boolean) { _subsOn.value = v; sp.edit().putBoolean("subsOn", v).apply() }
     fun setSubsLang(v: String) { _subsLang.value = v; sp.edit().putString("subsLang", v).apply() }

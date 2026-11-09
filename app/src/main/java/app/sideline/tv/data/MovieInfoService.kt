@@ -19,6 +19,14 @@ object MovieInfoService {
         if (info.title.isBlank() || info.title == m.name) info = info.copy(title = cleanTitle)
         if (info.year.isBlank() && yearHint != null) info = info.copy(year = yearHint)
 
+        // TMDB (if you've added a key): audience rating, and a description when the provider has none.
+        if (info.certification.isBlank() || info.plot.length < 40) {
+            Tmdb.movie(info.title.ifBlank { cleanTitle }, info.year.ifBlank { yearHint })?.let { t ->
+                if (info.certification.isBlank() && !t.certification.isNullOrBlank()) info = info.copy(certification = t.certification)
+                if (info.plot.length < 40 && !t.overview.isNullOrBlank()) info = info.copy(plot = t.overview, plotSource = "Description from TMDB")
+                if (info.backdrop == null && t.backdrop != null) info = info.copy(backdrop = t.backdrop)
+            }
+        }
         if (info.plot.length < 40) {
             val wiki = Wikipedia.filmSummary(cleanTitle, info.year.ifBlank { yearHint })
             if (wiki != null) {

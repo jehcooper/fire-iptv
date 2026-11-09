@@ -11,6 +11,7 @@ class SidelineApp : Application() {
         prefs = Prefs(this)
         repo = Repository(prefs)
         scores = ScoreWatcher(prefs)
+        progress = app.sideline.tv.data.WatchProgress(this)
         if (prefs.accounts.value.isNotEmpty()) repo.refresh()
         scores.start()
     }
@@ -19,5 +20,6 @@ class SidelineApp : Application() {
         lateinit var prefs: Prefs
         lateinit var repo: Repository
         lateinit var scores: ScoreWatcher
+        lateinit var progress: app.sideline.tv.data.WatchProgress
     }
 }

@@ -41,6 +41,10 @@ import app.sideline.tv.data.EpgItem
 import app.sideline.tv.player.Play
 import coil.compose.AsyncImage
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import androidx.compose.runtime.produceState
+import androidx.compose.foundation.lazy.LazyRow
 
 private const val FAV = "__fav"
 private const val RECENT = "__recent"
@@ -60,8 +64,8 @@ fun SearchBox(value: String, onChange: (String) -> Unit, hint: String, modifier:
 }
 
 @Composable
-fun CategoryItem(name: String, selected: Boolean, onClick: () -> Unit) {
-    FocusCard(onClick = onClick, onFocus = onClick, modifier = Modifier.fillMaxWidth(), scaleOnFocus = 1.02f, shape = RoundedCornerShape(10.dp)) { f ->
+fun CategoryItem(name: String, selected: Boolean, onMenu: (() -> Unit)? = null, onClick: () -> Unit) {
+    FocusCard(onClick = onClick, onFocus = onClick, onMenu = onMenu, modifier = Modifier.fillMaxWidth(), scaleOnFocus = 1.02f, shape = RoundedCornerShape(10.dp)) { f ->
         Text(
             name, color = if (selected || f) C.Text else C.Muted, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
@@ -75,15 +79,18 @@ fun LiveScreen() {
     val ctx = LocalContext.current
     val repo = SidelineApp.repo
     val prefs = SidelineApp.prefs
-    val cats by repo.liveCategories.collectAsState()
+    val allCats by repo.liveCategories.collectAsState()
+    val hidden by prefs.hiddenCats.collectAsState()
+    val cats = remember(allCats, hidden) { allCats.filter { "live:${it.accountId}:${it.id}" !in hidden } }
     val channels by repo.channels.collectAsState()
     val favs by prefs.favChannels.collectAsState()
     val recent by prefs.recentChannels.collectAsState()
-    val multiAccount = cats.map { it.accountId }.distinct().size > 1
     val accounts by prefs.accounts.collectAsState()
+    val multiAccount = remember(cats) { cats.map { it.accountId }.distinct().size > 1 }
 
     var selected by rememberSaveable { mutableStateOf(if (favs.isNotEmpty()) FAV else "") }
     var query by rememberSaveable { mutableStateOf("") }
+    var guide by rememberSaveable { mutableStateOf(false) }
     var focusedCh by remember { mutableStateOf<Channel?>(null) }
     val counts = remember(channels) { channels.groupingBy { "${it.accountId}:${it.categoryId}" }.eachCount() }
     var epg by remember { mutableStateOf<List<EpgItem>>(emptyList()) }
@@ -94,11 +101,19 @@ fun LiveScreen() {
     }
     if (selected.isEmpty()) selected = cats.firstOrNull()?.let { "${it.accountId}:${it.id}" } ?: FAV
 
-    val list: List<Channel> = when (selected) {
-        FAV -> channels.filter { it.key in favs }
-        RECENT -> recent.mapNotNull { k -> channels.firstOrNull { it.key == k } }
-        SEARCH -> if (query.length < 2) emptyList() else channels.filter { it.name.contains(query, ignoreCase = true) }.take(300)
-        else -> channels.filter { "${it.accountId}:${it.categoryId}" == selected }
+    // Channel list for the selection, worked out off the main thread (search waits for you to stop typing).
+    val list by produceState(initialValue = emptyList<Channel>(), selected, query, channels, favs, recent, hidden) {
+        if (selected == SEARCH) delay(250)
+        value = withContext(Dispatchers.Default) {
+            when (selected) {
+                FAV -> channels.filter { it.key in favs }
+                RECENT -> recent.mapNotNull { repo.channel(it) }
+                SEARCH -> if (query.length < 2) emptyList() else channels.asSequence()
+                    .filter { "live:${it.accountId}:${it.categoryId}" !in hidden && it.name.contains(query, ignoreCase = true) }
+                    .take(300).toList()
+                else -> channels.filter { "${it.accountId}:${it.categoryId}" == selected }
+            }
+        }
     }
 
     // Load now/next for whichever channel has focus, after a short pause so scrolling stays smooth.
@@ -106,17 +121,44 @@ fun LiveScreen() {
         epg = emptyList()
         val c = focusedCh ?: return@LaunchedEffect
         delay(350)
-        epg = repo.epg(c, 3)
+        epg = repo.epgCached(c)
+    }
+
+    fun catLabel(c: app.sideline.tv.data.Category): String {
+        val prefix = if (multiAccount) (accounts.firstOrNull { it.id == c.accountId }?.name?.take(10)?.plus(" · ") ?: "") else ""
+        return "$prefix${c.name}  (${counts["${c.accountId}:${c.id}"] ?: 0})"
+    }
+
+    if (guide) {
+        // Full-width TV guide; categories become a row of chips across the top.
+        Column(Modifier.fillMaxSize().padding(start = 48.dp, end = 48.dp, top = 4.dp)) {
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(vertical = 6.dp)) {
+                item { Chip("☰ List view", false, onClick = { guide = false }) }
+                item { Chip("★ Favourites", selected == FAV, onClick = { selected = FAV }) }
+                items(cats, key = { "${it.accountId}:${it.id}" }) { c ->
+                    Chip(catLabel(c), selected == "${c.accountId}:${c.id}", onClick = { selected = "${c.accountId}:${c.id}" })
+                }
+            }
+            if (list.isEmpty()) Text("No channels in this category.", color = C.Muted, modifier = Modifier.padding(16.dp))
+            else ProgramGuide(list)
+        }
+        return
     }
 
     Row(Modifier.fillMaxSize().padding(start = 48.dp, end = 48.dp, top = 8.dp)) {
         LazyColumn(Modifier.width(300.dp), verticalArrangement = Arrangement.spacedBy(4.dp), contentPadding = PaddingValues(bottom = 60.dp)) {
+            item { CategoryItem("📺 TV guide view", false) { guide = true } }
             item { CategoryItem("🔍 Search", selected == SEARCH) { selected = SEARCH } }
             item { CategoryItem("★ Favourites (${favs.size})", selected == FAV) { selected = FAV } }
             item { CategoryItem("⟲ Recent (${recent.size})", selected == RECENT) { selected = RECENT } }
             items(cats, key = { "${it.accountId}:${it.id}" }) { c ->
-                val prefix = if (multiAccount) (accounts.firstOrNull { it.id == c.accountId }?.name?.take(10)?.plus(" · ") ?: "") else ""
-                CategoryItem("$prefix${c.name}  (${counts["${c.accountId}:${c.id}"] ?: 0})", selected == "${c.accountId}:${c.id}") { selected = "${c.accountId}:${c.id}" }
+                CategoryItem(catLabel(c), selected == "${c.accountId}:${c.id}", onMenu = { prefs.toggleHidden("live:${c.accountId}:${c.id}") }) {
+                    selected = "${c.accountId}:${c.id}"
+                }
+            }
+            item {
+                Text("Menu (≡) on a category hides it. Bring hidden ones back in Settings.", color = C.Faint, fontSize = 12.sp,
+                    modifier = Modifier.padding(10.dp))
             }
         }
         Spacer(Modifier.width(28.dp))
@@ -131,7 +173,8 @@ fun LiveScreen() {
                         Text(c.name, color = C.Text, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, modifier = Modifier.weight(1f))
                         if (c.hasArchive) Pill("CATCH-UP", C.Gold)
                     }
-                    val now = epg.firstOrNull { it.isNow } ?: epg.firstOrNull()
+                    val nowS = System.currentTimeMillis() / 1000
+                    val now = epg.firstOrNull { nowS in it.start until it.end } ?: epg.firstOrNull { it.end > nowS }
                     val next = now?.let { epg.getOrNull(epg.indexOf(it) + 1) }
                     if (now != null) Text("Now  ${timeOf(now.start * 1000)}  ${now.title}", color = C.Text, fontSize = 15.sp, maxLines = 1, modifier = Modifier.padding(top = 8.dp))
                     if (next != null) Text("Next ${timeOf(next.start * 1000)}  ${next.title}", color = C.Muted, fontSize = 14.sp, maxLines = 1)

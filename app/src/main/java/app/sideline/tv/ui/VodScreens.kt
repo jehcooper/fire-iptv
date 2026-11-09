@@ -1,6 +1,7 @@
 package app.sideline.tv.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -47,6 +48,10 @@ import app.sideline.tv.data.Category
 import app.sideline.tv.data.Episode
 import app.sideline.tv.data.Movie
 import app.sideline.tv.data.MovieInfo
+import app.sideline.tv.data.ProgressEntry
+import androidx.compose.runtime.produceState
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import app.sideline.tv.data.MovieInfoService
 import app.sideline.tv.data.Series
 import app.sideline.tv.player.Play
@@ -56,39 +61,62 @@ import kotlinx.coroutines.delay
 private const val ALL = "__all"
 private const val FIND = "__search"
 private const val EVERYTHING = "__everything"
+private const val CONTINUE = "__continue"
 
 @Composable
 private fun <T> VodBrowser(
+    kind: String,
     emptyTitle: String,
     cats: List<Category>,
     all: List<T>,
     catOf: (T) -> String,
     nameOf: (T) -> String,
     keyOf: (T) -> String,
+    continueItems: List<ProgressEntry>,
     tile: @Composable (T) -> Unit,
 ) {
-    var selected by rememberSaveable { mutableStateOf(ALL) }
+    val ctx = LocalContext.current
+    val prefs = SidelineApp.prefs
+    val hidden by prefs.hiddenCats.collectAsState()
+    var selected by rememberSaveable { mutableStateOf(if (continueItems.isNotEmpty()) CONTINUE else ALL) }
     var query by rememberSaveable { mutableStateOf("") }
     if (all.isEmpty()) {
         EmptyState(emptyTitle, "Add an account with \"On-demand\" ticked in Settings, or wait for loading to finish.")
         return
     }
+    val visibleCats = remember(cats, hidden) { cats.filter { "$kind:${it.accountId}:${it.id}" !in hidden } }
     val counts = remember(all) { all.groupingBy { catOf(it) }.eachCount() }
-    val alphabetical = remember(all) { all.sortedBy { nameOf(it).lowercase() } }
-    val shown = when (selected) {
-        ALL -> all.takeLast(300).reversed()
-        EVERYTHING -> alphabetical
-        FIND -> if (query.length < 2) emptyList() else all.filter { nameOf(it).contains(query, ignoreCase = true) }.take(300)
-        else -> all.filter { catOf(it) == selected }
+    // Everything in a hidden category is left out of "All", "Recently added" and search.
+    val visibleAll = remember(all, hidden) {
+        if (hidden.none { it.startsWith("$kind:") }) all else all.filter { "$kind:${catOf(it)}" !in hidden }
+    }
+    val alphabetical = remember(visibleAll) { visibleAll.sortedBy { nameOf(it).lowercase() } }
+    // Worked out off the main thread so the remote stays responsive with big libraries; search waits for a pause in typing.
+    val shown by produceState(initialValue = emptyList<T>(), selected, query, visibleAll) {
+        if (selected == FIND) delay(250)
+        value = withContext(Dispatchers.Default) {
+            when (selected) {
+                ALL -> visibleAll.takeLast(300).reversed()
+                EVERYTHING -> alphabetical
+                FIND -> if (query.length < 2) emptyList() else visibleAll.asSequence().filter { nameOf(it).contains(query, ignoreCase = true) }.take(300).toList()
+                CONTINUE -> emptyList()
+                else -> all.filter { catOf(it) == selected }
+            }
+        }
     }
     Row(Modifier.fillMaxSize().padding(start = 48.dp, end = 32.dp, top = 8.dp)) {
         LazyColumn(Modifier.width(280.dp), verticalArrangement = Arrangement.spacedBy(4.dp), contentPadding = PaddingValues(bottom = 60.dp)) {
+            if (continueItems.isNotEmpty()) item { CategoryItem("▶ Continue watching  (${continueItems.size})", selected == CONTINUE) { selected = CONTINUE } }
             item { CategoryItem("🔍 Search", selected == FIND) { selected = FIND } }
-            item { CategoryItem("All A–Z  (${all.size})", selected == EVERYTHING) { selected = EVERYTHING } }
+            item { CategoryItem("All A–Z  (${visibleAll.size})", selected == EVERYTHING) { selected = EVERYTHING } }
             item { CategoryItem("Recently added", selected == ALL) { selected = ALL } }
-            items(cats, key = { "${it.accountId}:${it.id}" }) { c ->
+            items(visibleCats, key = { "${it.accountId}:${it.id}" }) { c ->
                 val k = "${c.accountId}:${c.id}"
-                CategoryItem("${c.name}  (${counts[k] ?: 0})", selected == k) { selected = k }
+                CategoryItem("${c.name}  (${counts[k] ?: 0})", selected == k, onMenu = { prefs.toggleHidden("$kind:$k") }) { selected = k }
+            }
+            item {
+                Text("Menu (≡) on a category hides it. Bring hidden ones back in Settings.", color = C.Faint, fontSize = 12.sp,
+                    modifier = Modifier.padding(10.dp))
             }
         }
         Spacer(Modifier.width(24.dp))
@@ -97,13 +125,41 @@ private fun <T> VodBrowser(
                 SearchBox(query, { query = it }, "Search all titles in every category")
                 Spacer(Modifier.height(10.dp))
             }
-            LazyVerticalGrid(
-                columns = GridCells.Adaptive(160.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                verticalArrangement = Arrangement.spacedBy(18.dp),
-                contentPadding = PaddingValues(12.dp, 8.dp, 12.dp, 60.dp),
-            ) {
-                items(shown, key = keyOf) { tile(it) }
+            if (selected == CONTINUE) {
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(240.dp),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(18.dp),
+                    contentPadding = PaddingValues(12.dp, 8.dp, 12.dp, 60.dp),
+                ) {
+                    items(continueItems, key = { it.key }) { p -> ProgressCard(p, onClick = { Play.resume(ctx, p) }) }
+                }
+            } else {
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(160.dp),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(18.dp),
+                    contentPadding = PaddingValues(12.dp, 8.dp, 12.dp, 60.dp),
+                ) {
+                    items(shown, key = keyOf) { tile(it) }
+                }
+            }
+        }
+    }
+}
+
+/** A started movie or episode: image, how far in, and time left. Menu removes it from the list. */
+@Composable
+fun ProgressCard(p: ProgressEntry, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    FocusCard(onClick = onClick, onMenu = { SidelineApp.progress.remove(p.key) }, modifier = modifier.width(240.dp).height(150.dp)) { f ->
+        AsyncImage(model = p.image, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xF00B0F14)))))
+        Column(Modifier.align(Alignment.BottomStart).padding(10.dp)) {
+            Text(p.title, color = C.Text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (p.subtitle.isNotBlank()) Text(p.subtitle, color = C.Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text("${fmtTime((p.duration - p.position).coerceAtLeast(0))} left" + if (f) "  ·  ≡ remove" else "", color = C.Faint, fontSize = 11.sp)
+            Box(Modifier.padding(top = 4.dp).fillMaxWidth().height(3.dp).background(C.Surface2)) {
+                Box(Modifier.fillMaxWidth(p.fraction).height(3.dp).background(C.Accent))
             }
         }
     }
@@ -115,9 +171,11 @@ fun MoviesScreen() {
     val cats by repo.vodCategories.collectAsState()
     val movies by repo.movies.collectAsState()
     var open by remember { mutableStateOf<Movie?>(null) }
+    val progress by SidelineApp.progress.entries.collectAsState()
+    val cont = remember(progress) { progress.filter { it.kind == "movie" } }
     VodBrowser(
-        "No movies yet", cats, movies,
-        catOf = { "${it.accountId}:${it.categoryId}" }, nameOf = { it.name }, keyOf = { it.key },
+        "vod", "No movies yet", cats, movies,
+        catOf = { "${it.accountId}:${it.categoryId}" }, nameOf = { it.name }, keyOf = { it.key }, continueItems = cont,
     ) { m -> PosterCard(m.name, m.poster, onClick = { open = m }, badge = m.rating?.takeIf { it != "0" && it.isNotBlank() }?.let { "★ ${it.take(3)}" }) }
     open?.let { MovieSheet(it) { open = null } }
 }
@@ -154,7 +212,10 @@ fun MovieSheet(m: Movie, onDismiss: () -> Unit) {
                 if (i == null) {
                     Text("Looking up details…", color = C.Muted, fontSize = 15.sp, modifier = Modifier.padding(top = 10.dp))
                 } else {
-                    if (i.metaLine.isNotBlank()) Text(i.metaLine, color = C.Accent, fontSize = 15.sp, modifier = Modifier.padding(top = 6.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 6.dp)) {
+                        if (i.certification.isNotBlank()) { RatingBadge(i.certification); Spacer(Modifier.width(10.dp)) }
+                        if (i.metaLine.isNotBlank()) Text(i.metaLine, color = C.Accent, fontSize = 15.sp)
+                    }
                     Text(i.plot.ifBlank { "No description found for this title." }, color = C.Text, fontSize = 16.sp,
                         maxLines = 9, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 14.dp))
                     if (i.director.isNotBlank()) Text("Director: ${i.director}", color = C.Muted, fontSize = 14.sp, maxLines = 1, modifier = Modifier.padding(top = 12.dp))
@@ -190,9 +251,11 @@ fun SeriesScreen() {
     val cats by repo.seriesCategories.collectAsState()
     val series by repo.series.collectAsState()
     var open by remember { mutableStateOf<Series?>(null) }
+    val progress by SidelineApp.progress.entries.collectAsState()
+    val cont = remember(progress) { progress.filter { it.kind == "episode" } }
     VodBrowser(
-        "No series yet", cats, series,
-        catOf = { "${it.accountId}:${it.categoryId}" }, nameOf = { it.name }, keyOf = { "${it.accountId}:${it.seriesId}" },
+        "series", "No series yet", cats, series,
+        catOf = { "${it.accountId}:${it.categoryId}" }, nameOf = { it.name }, keyOf = { "${it.accountId}:${it.seriesId}" }, continueItems = cont,
     ) { s -> PosterCard(s.name, s.cover, onClick = { open = s }) }
     open?.let { SeriesSheet(it) { open = null } }
 }
@@ -202,13 +265,17 @@ fun SeriesSheet(s: Series, onDismiss: () -> Unit) {
     val ctx = LocalContext.current
     var episodes by remember { mutableStateOf<List<Episode>?>(null) }
     var season by remember { mutableStateOf(1) }
+    var rating by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(s.seriesId) {
-        val eps = SidelineApp.repo.client(s.accountId)?.episodes(s.seriesId) ?: emptyList()
+        val client = SidelineApp.repo.client(s.accountId)
+        val eps = client?.episodes(s.seriesId) ?: emptyList()
         episodes = eps
         season = eps.firstOrNull()?.season ?: 1
+        rating = client?.lastSeriesRating ?: app.sideline.tv.data.Tmdb.series(MovieInfoService.cleanTitle(s.name).first)?.certification
     }
     DetailSheet(s.cover, onDismiss) {
         Text(s.name, color = C.Text, fontSize = 32.sp, fontWeight = FontWeight.Bold)
+        rating?.takeIf { it.isNotBlank() }?.let { Box(Modifier.padding(top = 6.dp)) { RatingBadge(it) } }
         if (!s.plot.isNullOrBlank()) Text(s.plot, color = C.Muted, fontSize = 15.sp, maxLines = 3, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 8.dp))
         Spacer(Modifier.height(16.dp))
         val eps = episodes
@@ -221,7 +288,7 @@ fun SeriesSheet(s: Series, onDismiss: () -> Unit) {
         Spacer(Modifier.height(10.dp))
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 60.dp, end = 8.dp)) {
             items(eps.filter { it.season == season }, key = { it.id }) { e ->
-                FocusCard(onClick = { Play.episode(ctx, e, s.name) }, modifier = Modifier.fillMaxWidth(), scaleOnFocus = 1.02f) { _ ->
+                FocusCard(onClick = { Play.episode(ctx, e, s.name, s.seriesId, s.cover) }, modifier = Modifier.fillMaxWidth(), scaleOnFocus = 1.02f) { _ ->
                     Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
                         AsyncImage(model = e.image ?: s.cover, contentDescription = null, contentScale = ContentScale.Crop,
                             modifier = Modifier.size(width = 128.dp, height = 72.dp))
@@ -235,4 +302,11 @@ fun SeriesSheet(s: Series, onDismiss: () -> Unit) {
             }
         }
     }
+}
+
+/** Audience rating chip, e.g. "PG-13", "TV-MA". */
+@Composable
+fun RatingBadge(text: String) {
+    Text(text, color = C.Text, fontSize = 13.sp, fontWeight = FontWeight.Bold,
+        modifier = Modifier.border(1.5.dp, C.Muted, RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 1.dp))
 }

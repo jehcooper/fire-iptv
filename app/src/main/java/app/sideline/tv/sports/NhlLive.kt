@@ -28,6 +28,27 @@ object NhlLive {
             ?: (t?.get("commonName") as? JsonObject)?.s("default") ?: "").lowercase()
     }
 
+    private val idMap = java.util.concurrent.ConcurrentHashMap<String, Long>()
+
+    /**
+     * For a goal that just happened: wait briefly for the NHL play-by-play to record it, then return
+     * "TOR · Matthews (12) · assists: …". Null if it doesn't catch up within ~20 seconds.
+     */
+    suspend fun freshGoal(espnGameId: String, totalScore: Int): String? {
+        val id = idMap[espnGameId] ?: return null
+        repeat(3) { attempt ->
+            try {
+                val pbp = playByPlay(id)
+                if (pbp.third >= totalScore && pbp.first != null) return pbp.first
+            } catch (_: Exception) { }
+            if (attempt < 2) kotlinx.coroutines.delay(8_000)
+        }
+        return null
+    }
+
+    /** Last goal per NHL game id, refreshed only when that game's score changes. */
+    private val goalCache = java.util.concurrent.ConcurrentHashMap<Long, Triple<Int, String?, String?>>() // totalScore → (lastGoal, situationCode)
+
     /** Adds HockeyInfo to the live NHL games in [games]. Leaves them untouched if the feed can't be read. */
     suspend fun enrich(games: List<Game>, detailIds: Set<String>): List<Game> {
         if (games.none { it.isLive }) return games
@@ -37,9 +58,28 @@ object NhlLive {
             val away = g.away ?: return@map g
             val home = g.home ?: return@map g
             val l = live.firstOrNull { matches(it.awayAbbr, it.awayName, away) && matches(it.homeAbbr, it.homeName, home) } ?: return@map g
-            // Play-by-play is a big download, so only for games you've pinned or follow.
-            val code = l.situationCode ?: if (g.id in detailIds) (try { lastSituationCode(l.gameId) } catch (_: Exception) { null }) else null
-            g.copy(hockey = decode(l, code))
+            idMap[g.id] = l.gameId
+            // Play-by-play is a big download, so only for games you've pinned or follow,
+            // and only re-fetched when the score changes (for the goal) or the feed lacks the situation.
+            var code = l.situationCode
+            var lastGoal: String? = null
+            var counted = 0
+            if (g.id in detailIds) {
+                val total = g.competitors.sumOf { it.score.toIntOrNull() ?: 0 }
+                val cached = goalCache[l.gameId]
+                if (cached != null && cached.first == total && code != null) {
+                    lastGoal = cached.second
+                } else try {
+                    val pbp = playByPlay(l.gameId)
+                    lastGoal = pbp.first
+                    counted = pbp.third
+                    if (code == null) code = pbp.second
+                    // Only trust the cache once the play-by-play has caught up with the score.
+                    if (pbp.third >= total) goalCache[l.gameId] = Triple(total, lastGoal, pbp.second) else goalCache.remove(l.gameId)
+                } catch (_: Exception) { lastGoal = cached?.second }
+                if (counted == 0) counted = total
+            }
+            g.copy(hockey = decode(l, code).copy(lastGoal = lastGoal, goalsCounted = counted))
         }
     }
 
@@ -65,9 +105,52 @@ object NhlLive {
         } ?: emptyList()
     }
 
-    private suspend fun lastSituationCode(gameId: Long): String? {
+    /** (last goal text, latest situationCode, goals counted) from the NHL play-by-play. */
+    private suspend fun playByPlay(gameId: Long): Triple<String?, String?, Int> {
         val root = Net.getJson("https://api-web.nhle.com/v1/gamecenter/$gameId/play-by-play").obj()
-        return root?.get("plays").arr()?.mapNotNull { it.obj() }?.lastOrNull { it.s("situationCode") != null }?.s("situationCode")
+            ?: return Triple(null, null, 0)
+        val plays = root["plays"].arr()?.mapNotNull { it.obj() } ?: emptyList()
+        val code = plays.lastOrNull { it.s("situationCode") != null }?.s("situationCode")
+        val names = root["rosterSpots"].arr()?.mapNotNull { it.obj() }?.associate { p ->
+            (p.s("playerId") ?: "") to (((p["lastName"] as? JsonObject)?.s("default")) ?: "")
+        } ?: emptyMap()
+        val homeId = root["homeTeam"].obj()?.s("id")
+        val homeAbbr = root["homeTeam"].obj()?.s("abbrev") ?: "HOME"
+        val awayAbbr = root["awayTeam"].obj()?.s("abbrev") ?: "AWAY"
+        val goals = plays.filter { it.s("typeDescKey") == "goal" && it["periodDescriptor"].obj()?.s("periodType") != "SO" }
+        val g = goals.lastOrNull() ?: return Triple(null, code, 0)
+        val d = g["details"].obj()
+        fun who(idKey: String, totalKey: String): String? {
+            val id = d?.s(idKey) ?: return null
+            val n = names[id]?.takeIf { it.isNotBlank() } ?: return null
+            return d.s(totalKey)?.let { "$n ($it)" } ?: n
+        }
+        val scorer = who("scoringPlayerId", "scoringPlayerTotal") ?: "Goal"
+        val assists = listOfNotNull(who("assist1PlayerId", "assist1PlayerTotal"), who("assist2PlayerId", "assist2PlayerTotal"))
+        val isHome = d?.s("eventOwnerTeamId") == homeId
+        // Power-play / short-handed / empty-net goal, from the skater counts at the moment of the goal.
+        val tag = g.s("situationCode")?.takeIf { it.length == 4 && it.all { c -> c.isDigit() } }?.let { sc ->
+            val aG = sc[0].digitToInt(); val aS = sc[1].digitToInt(); val hS = sc[2].digitToInt(); val hG = sc[3].digitToInt()
+            val mine = if (isHome) hS else aS
+            val theirs = if (isHome) aS else hS
+            val theirGoalie = if (isHome) aG else hG
+            when {
+                theirGoalie == 0 -> "EN"
+                mine > theirs -> "PPG"
+                mine < theirs -> "SHG"
+                else -> null
+            }
+        }
+        val period = g["periodDescriptor"].obj()?.s("number")?.let { "P$it" } ?: ""
+        val time = g.s("timeInPeriod") ?: ""
+        val text = listOfNotNull(
+            if (isHome) homeAbbr else awayAbbr,
+            scorer,
+            if (assists.isEmpty()) "unassisted" else "assists: " + assists.joinToString(", "),
+            tag,
+            "$period $time".trim().takeIf { it.isNotBlank() },
+        ).joinToString(" · ")
+        return Triple(text, code, goals.size)
     }
 
     /**

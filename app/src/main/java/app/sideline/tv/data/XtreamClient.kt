@@ -83,8 +83,13 @@ class XtreamClient(val account: Account) {
         Series(account.id, id, o.s("name") ?: "Series $id", o.s("cover"), o.s("category_id") ?: "", o.s("plot"), o.s("rating"))
     } ?: emptyList()
 
+    /** Audience rating from the provider's series info, if it has one. */
+    var lastSeriesRating: String? = null
+        private set
+
     suspend fun episodes(seriesId: Int): List<Episode> {
         val root = call("get_series_info", mapOf("series_id" to seriesId.toString())).obj() ?: return emptyList()
+        lastSeriesRating = Tmdb.providerRating(root["info"].obj())
         val eps = root["episodes"]
         val out = mutableListOf<Episode>()
         // Usually {"1":[...],"2":[...]}, but some panels send a plain array of season arrays.
@@ -130,6 +135,7 @@ class XtreamClient(val account: Account) {
                 cast = info.s("cast") ?: info.s("actors") ?: "",
                 backdrop = backdrop?.takeIf { it.startsWith("http") },
                 poster = info.s("movie_image") ?: info.s("cover_big") ?: m.poster,
+                certification = Tmdb.providerRating(info) ?: "",
             )
         }
     } catch (e: Exception) { null }
