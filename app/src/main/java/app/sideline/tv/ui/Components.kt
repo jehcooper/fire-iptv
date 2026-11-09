@@ -40,6 +40,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -180,6 +181,7 @@ fun PosterCard(
     FocusCard(onClick = onClick, onFocus = onFocus, onMenu = onMenu, modifier = modifier.width(w).height(h)) { focused ->
         AsyncImage(
             model = image, contentDescription = null,
+            placeholder = if (wide) null else ColorPainter(C.Surface2),
             contentScale = if (wide) ContentScale.Fit else ContentScale.Crop,
             modifier = Modifier.fillMaxSize().padding(if (wide) 18.dp else 0.dp),
         )

@@ -22,6 +22,16 @@ object Net {
 
     val json = Json { ignoreUnknownKeys = true; isLenient = true }
 
+    /** Where big provider lists are kept between launches (set by the app at start-up). */
+    @Volatile var cacheDir: java.io.File? = null
+
+    suspend fun getText(url: String): String = withContext(Dispatchers.IO) {
+        http.newCall(Request.Builder().url(url).build()).execute().use { resp ->
+            if (!resp.isSuccessful) throw RuntimeException("Server answered ${resp.code}")
+            resp.body?.string().orEmpty()
+        }
+    }
+
     suspend fun getJson(url: String): JsonElement = withContext(Dispatchers.IO) {
         http.newCall(Request.Builder().url(url).build()).execute().use { resp ->
             if (!resp.isSuccessful) throw RuntimeException("Server answered ${resp.code}")

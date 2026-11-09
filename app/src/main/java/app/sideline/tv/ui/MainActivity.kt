@@ -65,6 +65,8 @@ private fun Root() {
                 }
                 Spacer(Modifier.weight(1f))
                 if (loading) CircularProgressIndicator(color = C.Accent, strokeWidth = 2.dp, modifier = Modifier.size(22.dp))
+                Spacer(Modifier.width(16.dp))
+                Clock()
             }
             Box(Modifier.fillMaxSize()) {
                 when (tab) {
@@ -79,4 +81,17 @@ private fun Root() {
         }
         ScorePopupHost()
     }
+}
+
+/** Time in the top-right corner, as most TV interfaces show; updates once a minute. */
+@Composable
+private fun Clock() {
+    var now by androidx.compose.runtime.remember { mutableStateOf(System.currentTimeMillis()) }
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        while (true) {
+            now = System.currentTimeMillis()
+            kotlinx.coroutines.delay(60_000 - now % 60_000)
+        }
+    }
+    Text(timeOf(now), color = C.Muted, fontSize = 18.sp)
 }

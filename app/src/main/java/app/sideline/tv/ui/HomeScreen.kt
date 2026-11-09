@@ -50,13 +50,17 @@ fun HomeScreen(goTo: (Tab) -> Unit) {
         return
     }
 
-    val allGames = board.values.flatten().distinctBy { it.id }
-    val mine = allGames.filter { g -> g.id in followed || g.competitors.any { app.sideline.tv.sports.Leagues.teamKey(g.leagueId, it.id) in favTeams } }
-        .sortedWith(compareBy({ !it.isLive }, { it.isFinal }, { it.startMillis }))
-    val liveNow = allGames.filter { it.isLive && it !in mine }.take(15)
-    val byKey = channels.associateBy { it.key }
-    val recentCh = recent.mapNotNull { byKey[it] }
-    val favList = channels.filter { it.key in favCh }
+    // Worked out only when the underlying data changes, not on every recomposition.
+    val allGames = remember(board) { board.values.flatten().distinctBy { it.id } }
+    val mine = remember(allGames, followed, favTeams) {
+        allGames.filter { g -> g.id in followed || g.competitors.any { app.sideline.tv.sports.Leagues.teamKey(g.leagueId, it.id) in favTeams } }
+            .sortedWith(compareBy({ !it.isLive }, { it.isFinal }, { it.startMillis }))
+    }
+    val liveNow = remember(allGames, mine) { allGames.filter { it.isLive && it !in mine }.take(15) }
+    val recentCh = remember(recent, channels) { recent.mapNotNull { repo.channel(it) } }
+    val favList = remember(favCh, channels) { channels.filter { it.key in favCh } }
+    val latestMovies = remember(movies) { movies.takeLast(30).reversed() }
+    val latestSeries = remember(series) { series.takeLast(30).reversed() }
 
     LazyColumn(
         contentPadding = PaddingValues(start = 48.dp, end = 48.dp, top = 16.dp, bottom = 60.dp),
@@ -107,7 +111,7 @@ fun HomeScreen(goTo: (Tab) -> Unit) {
             Column {
                 SectionTitle("Movies")
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    items(movies.takeLast(30).reversed(), key = { it.key }) { m -> PosterCard(m.name, m.poster, onClick = { openMovie = m }) }
+                    items(latestMovies, key = { it.key }) { m -> PosterCard(m.name, m.poster, onClick = { openMovie = m }) }
                 }
             }
         }
@@ -115,7 +119,7 @@ fun HomeScreen(goTo: (Tab) -> Unit) {
             Column {
                 SectionTitle("Series")
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    items(series.takeLast(30).reversed(), key = { "${it.accountId}:${it.seriesId}" }) { s ->
+                    items(latestSeries, key = { "${it.accountId}:${it.seriesId}" }) { s ->
                         PosterCard(s.name, s.cover, onClick = { openSeries = s })
                     }
                 }

@@ -56,10 +56,15 @@ class Repository(private val prefs: Prefs) {
 
     fun refresh() {
         if (_loading.value) return
-        scope.launch { load() }
+        scope.launch {
+            _loading.value = true
+            // Saved copy first (instant), then the provider's latest.
+            if (channels.value.isEmpty() && movies.value.isEmpty()) load(fromCache = true)
+            load(fromCache = false)
+        }
     }
 
-    private suspend fun load() {
+    private suspend fun load(fromCache: Boolean) {
         _loading.value = true
         val errs = java.util.Collections.synchronizedList(mutableListOf<String>())
         val accounts = prefs.accounts.value
@@ -68,38 +73,51 @@ class Repository(private val prefs: Prefs) {
                 async {
                     try {
                         val c = client(a.id)!!
-                        c.liveCategories() to c.liveStreams()
-                    } catch (e: Exception) { errs += "${a.name} (live): ${e.message}"; emptyList<Category>() to emptyList<Channel>() }
+                        c.liveCategories(fromCache) to c.liveStreams(fromCache)
+                    } catch (e: Exception) {
+                        if (!fromCache) errs += "${a.name} (live): ${e.message}"
+                        emptyList<Category>() to emptyList<Channel>()
+                    }
                 }
             }
             val vod = accounts.filter { it.useVod }.map { a ->
                 async {
                     try {
                         val c = client(a.id)!!
-                        Triple(c.vodCategories(), c.vodStreams(), c.seriesCategories() to c.series())
+                        Triple(c.vodCategories(fromCache), c.vodStreams(fromCache), c.seriesCategories(fromCache) to c.series(fromCache))
                     } catch (e: Exception) {
-                        errs += "${a.name} (on-demand): ${e.message}"
+                        if (!fromCache) errs += "${a.name} (on-demand): ${e.message}"
                         Triple(emptyList<Category>(), emptyList<Movie>(), emptyList<Category>() to emptyList<Series>())
                     }
                 }
             }
             val liveRes = live.awaitAll()
+            val newChannels = liveRes.flatMap { it.second }
+            // Keep what's on screen if a refresh comes back empty (e.g. provider briefly down).
+            if (newChannels.isNotEmpty() || (!fromCache && errs.isEmpty())) {
             liveCategories.value = liveRes.flatMap { it.first }
-            channels.value = liveRes.flatMap { it.second }
+            channels.value = newChannels
             val norm = channels.value.associate { it.key to normalizeChannelName(it.name) }
             normNames = norm
             lowerNames = channels.value.associate { it.key to it.name.lowercase() }
             byKey = channels.value.associateBy { it.key }
             twins = channels.value.groupBy { norm[it.key] ?: "" }
+            }
 
             val vodRes = vod.awaitAll()
-            vodCategories.value = vodRes.flatMap { it.first }
-            movies.value = vodRes.flatMap { it.second }
-            seriesCategories.value = vodRes.flatMap { it.third.first }
-            series.value = vodRes.flatMap { it.third.second }
+            val newMovies = vodRes.flatMap { it.second }
+            val newSeries = vodRes.flatMap { it.third.second }
+            if (newMovies.isNotEmpty() || newSeries.isNotEmpty() || (!fromCache && errs.isEmpty())) {
+                vodCategories.value = vodRes.flatMap { it.first }
+                movies.value = newMovies
+                seriesCategories.value = vodRes.flatMap { it.third.first }
+                series.value = newSeries
+            }
         }
-        _errors.value = errs.toList()
-        _loading.value = false
+        if (!fromCache) {
+            _errors.value = errs.toList()
+            _loading.value = false
+        }
     }
 
     fun channel(key: String): Channel? = byKey[key] ?: channels.value.firstOrNull { it.key == key }

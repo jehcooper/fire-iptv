@@ -46,6 +46,8 @@ class ScoreWatcher(private val prefs: Prefs) {
         started = true
         scope.launch {
             while (true) {
+                // Nothing on screen (app in the background): don't use the network or CPU.
+                if (!app.sideline.tv.SidelineApp.foreground) { delay(5_000); continue }
                 refreshOnce()
                 // Faster polling while something the user cares about is live.
                 val anyLiveFollowed = _board.value.values.flatten().any { it.isLive && (isWatched(it) || it.id in prefs.pinnedGames.value) }

@@ -4,6 +4,8 @@ import android.util.Base64
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /** Talks to one Xtream Codes panel via player_api.php. */
 class XtreamClient(val account: Account) {
@@ -24,6 +26,26 @@ class XtreamClient(val account: Account) {
 
     private suspend fun call(action: String?, extra: Map<String, String> = emptyMap()): JsonElement =
         Net.getJson(apiUrl(action, extra))
+
+    class NoCache : Exception("no saved copy")
+
+    /**
+     * Big lists (channels, movies, series): saved to the stick after each download so the next launch can
+     * show them instantly from [fromCache], then refresh from the provider in the background.
+     */
+    private suspend fun listCall(action: String, fromCache: Boolean): JsonElement = withContext(Dispatchers.IO) {
+        val f = Net.cacheDir?.let { java.io.File(it, "${account.id}_$action.json") }
+        if (fromCache) {
+            if (f == null || !f.exists()) throw NoCache()
+            return@withContext Net.json.parseToJsonElement(f.readText())
+        }
+        val text = Net.getText(apiUrl(action))
+        val el = Net.json.parseToJsonElement(text.ifBlank { "null" })
+        if (f != null && el is kotlinx.serialization.json.JsonArray) {
+            try { f.parentFile?.mkdirs(); val tmp = java.io.File(f.path + ".tmp"); tmp.writeText(text); tmp.renameTo(f) } catch (_: Exception) { }
+        }
+        el
+    }
 
     suspend fun login(): AccountStatus = try {
         val root = call(null).obj()
@@ -54,11 +76,11 @@ class XtreamClient(val account: Account) {
         Category(account.id, id, o.s("category_name") ?: "Other")
     } ?: emptyList()
 
-    suspend fun liveCategories() = categories(call("get_live_categories"))
-    suspend fun vodCategories() = categories(call("get_vod_categories"))
-    suspend fun seriesCategories() = categories(call("get_series_categories"))
+    suspend fun liveCategories(fromCache: Boolean = false) = categories(listCall("get_live_categories", fromCache))
+    suspend fun vodCategories(fromCache: Boolean = false) = categories(listCall("get_vod_categories", fromCache))
+    suspend fun seriesCategories(fromCache: Boolean = false) = categories(listCall("get_series_categories", fromCache))
 
-    suspend fun liveStreams(): List<Channel> = call("get_live_streams").arr()?.mapNotNull { it.obj() }?.mapNotNull { o ->
+    suspend fun liveStreams(fromCache: Boolean = false): List<Channel> = listCall("get_live_streams", fromCache).arr()?.mapNotNull { it.obj() }?.mapNotNull { o ->
         val id = o.i("stream_id") ?: return@mapNotNull null
         Channel(
             accountId = account.id,
@@ -72,13 +94,13 @@ class XtreamClient(val account: Account) {
         )
     } ?: emptyList()
 
-    suspend fun vodStreams(): List<Movie> = call("get_vod_streams").arr()?.mapNotNull { it.obj() }?.mapNotNull { o ->
+    suspend fun vodStreams(fromCache: Boolean = false): List<Movie> = listCall("get_vod_streams", fromCache).arr()?.mapNotNull { it.obj() }?.mapNotNull { o ->
         val id = o.i("stream_id") ?: return@mapNotNull null
         Movie(account.id, id, o.s("name") ?: "Movie $id", o.s("stream_icon"), o.s("category_id") ?: "",
             o.s("container_extension") ?: "mp4", o.s("rating"))
     } ?: emptyList()
 
-    suspend fun series(): List<Series> = call("get_series").arr()?.mapNotNull { it.obj() }?.mapNotNull { o ->
+    suspend fun series(fromCache: Boolean = false): List<Series> = listCall("get_series", fromCache).arr()?.mapNotNull { it.obj() }?.mapNotNull { o ->
         val id = o.i("series_id") ?: return@mapNotNull null
         Series(account.id, id, o.s("name") ?: "Series $id", o.s("cover"), o.s("category_id") ?: "", o.s("plot"), o.s("rating"))
     } ?: emptyList()
