@@ -37,6 +37,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
@@ -59,6 +61,7 @@ import app.sideline.tv.sports.AlertKind
 import app.sideline.tv.sports.Game
 import app.sideline.tv.sports.ScoreAlert
 import coil.compose.AsyncImage
+import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -278,4 +281,133 @@ fun TvDialog(onDismiss: () -> Unit, content: @Composable () -> Unit) {
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
     ) { content() }
+}
+
+// ---------------- Confirmations ----------------
+
+/** App-wide "Are you sure?" prompt, so favourites/deletes/hides never happen by accident. */
+object Confirm {
+    data class Req(val title: String, val message: String, val yes: String, val destructive: Boolean, val action: () -> Unit)
+    var req by mutableStateOf<Req?>(null)
+
+    fun ask(title: String, message: String = "", yes: String = "Yes", destructive: Boolean = false, action: () -> Unit) {
+        req = Req(title, message, yes, destructive, action)
+    }
+}
+
+/** Shows the pending confirmation. Destructive ones put the focus on Cancel, so a stray OK does nothing. */
+@Composable
+fun ConfirmHost() {
+    val r = Confirm.req ?: return
+    val yesFocus = remember(r) { FocusRequester() }
+    val noFocus = remember(r) { FocusRequester() }
+    LaunchedEffect(r) {
+        delay(200)
+        try { (if (r.destructive) noFocus else yesFocus).requestFocus() } catch (_: Exception) {}
+    }
+    TvDialog({ Confirm.req = null }) {
+        Box(Modifier.fillMaxSize().background(Color(0xB3000000)), contentAlignment = Alignment.Center) {
+            Column(Modifier.width(560.dp).clip(RoundedCornerShape(18.dp)).background(C.Surface).padding(28.dp)) {
+                Text(r.title, color = C.Text, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                if (r.message.isNotBlank()) Text(r.message, color = C.Muted, fontSize = 15.sp, modifier = Modifier.padding(top = 8.dp))
+                Spacer(Modifier.height(20.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Chip(r.yes, selected = !r.destructive, modifier = Modifier.focusRequester(yesFocus), onClick = {
+                        Confirm.req = null
+                        r.action()
+                    })
+                    Chip("Cancel", selected = false, modifier = Modifier.focusRequester(noFocus), onClick = { Confirm.req = null })
+                }
+            }
+        }
+    }
+}
+
+// ---------------- Search ----------------
+
+/** The search entry on a page: shows the current search; OK opens [SearchDialog]. */
+@Composable
+fun SearchButton(query: String, hint: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    FocusCard(onClick = onClick, modifier = modifier.fillMaxWidth(), scaleOnFocus = 1.01f, shape = RoundedCornerShape(10.dp)) { _ ->
+        Row(Modifier.padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("🔍", fontSize = 16.sp)
+            Spacer(Modifier.width(10.dp))
+            Text(if (query.isBlank()) hint else "\"$query\"  ·  OK to change", color = if (query.isBlank()) C.Muted else C.Text, fontSize = 16.sp)
+        }
+    }
+}
+
+/**
+ * Search in its own window: keyboard opens straight away, Search/Done on the keyboard (or the Search button)
+ * closes it and shows results. Keeping the text box out of the page stops it trapping the remote's focus.
+ */
+@Composable
+fun SearchDialog(initial: String, title: String, onSearch: (String) -> Unit, onDismiss: () -> Unit) {
+    var text by remember { mutableStateOf(androidx.compose.ui.text.input.TextFieldValue(initial, androidx.compose.ui.text.TextRange(initial.length))) }
+    val field = remember { FocusRequester() }
+    val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    LaunchedEffect(Unit) {
+        delay(250)
+        try { field.requestFocus(); keyboard?.show() } catch (_: Exception) {}
+    }
+    fun done() { keyboard?.hide(); onSearch(text.text.trim()) }
+    TvDialog(onDismiss) {
+        Box(Modifier.fillMaxSize().background(Color(0xD90B0F14)), contentAlignment = Alignment.TopCenter) {
+            Column(Modifier.padding(top = 60.dp).width(720.dp).clip(RoundedCornerShape(18.dp)).background(C.Surface).padding(28.dp)) {
+                Text(title, color = C.Text, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(12.dp))
+                androidx.compose.material3.OutlinedTextField(
+                    value = text, onValueChange = { text = it }, singleLine = true,
+                    placeholder = { Text("Type at least 2 letters", color = C.Faint) },
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Search),
+                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSearch = { done() }, onDone = { done() }),
+                    colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = C.Accent, unfocusedBorderColor = C.Surface2,
+                        focusedTextColor = C.Text, unfocusedTextColor = C.Text, cursorColor = C.Accent,
+                    ),
+                    modifier = Modifier.fillMaxWidth().focusRequester(field),
+                )
+                Spacer(Modifier.height(16.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Chip("Search", true, onClick = { done() })
+                    Chip("Clear", false, onClick = { text = androidx.compose.ui.text.input.TextFieldValue("") })
+                    Chip("Cancel", false, onClick = onDismiss)
+                }
+            }
+        }
+    }
+}
+
+/** "Starting now" pop-up for TV-guide reminders, with Watch now. (The player has its own version.) */
+@Composable
+fun ReminderHost() {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    var r by remember { mutableStateOf<app.sideline.tv.data.Reminder?>(null) }
+    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    // Only while this screen is in front; when the player is showing, it shows its own pop-up instead.
+    LaunchedEffect(lifecycle) {
+        lifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) { SidelineApp.reminders.due.collect { r = it } }
+    }
+    val cur = r ?: return
+    val watch = remember(cur) { FocusRequester() }
+    LaunchedEffect(cur) {
+        delay(200); try { watch.requestFocus() } catch (_: Exception) {}
+        delay(90_000); if (r == cur) r = null
+    }
+    TvDialog({ r = null }) {
+        Box(Modifier.fillMaxSize().padding(36.dp), contentAlignment = Alignment.TopEnd) {
+            Column(Modifier.width(460.dp).clip(RoundedCornerShape(16.dp)).background(C.Surface).border(2.dp, C.Accent, RoundedCornerShape(16.dp)).padding(20.dp)) {
+                Text("🔔 Starting now", color = C.Accent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                Text(cur.title, color = C.Text, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, modifier = Modifier.padding(top = 4.dp))
+                Text("${cur.channelName} · ${timeOf(cur.start * 1000)}", color = C.Muted, fontSize = 14.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 14.dp)) {
+                    Chip("▶ Watch now", true, modifier = Modifier.focusRequester(watch), onClick = {
+                        r = null
+                        SidelineApp.repo.channel(cur.channelKey)?.let { app.sideline.tv.player.Play.channel(ctx, it) }
+                    })
+                    Chip("Dismiss", false, onClick = { r = null })
+                }
+            }
+        }
+    }
 }

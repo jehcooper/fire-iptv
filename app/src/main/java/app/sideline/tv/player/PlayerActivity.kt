@@ -139,6 +139,8 @@ class PlayerActivity : ComponentActivity() {
     /** "Game starting" prompt: OK = watch it, Menu = pin the score. */
     private var prompt by mutableStateOf<ScoreAlert?>(null)
     private var promptJob: Job? = null
+    /** TV-guide reminder that just came due: OK = switch to that channel. */
+    private var reminder by mutableStateOf<app.sideline.tv.data.Reminder?>(null)
     private var details by mutableStateOf<MovieInfo?>(null)
     private val tried = mutableSetOf<String>()
     private var infoJob: Job? = null
@@ -221,6 +223,13 @@ class PlayerActivity : ComponentActivity() {
             is Play.Item.CatchUp -> { current = item.channel; catchUp = true; title = item.title; start(item.url) }
         }
 
+        lifecycleScope.launch {
+            SidelineApp.reminders.due.collect { r ->
+                reminder = r
+                promptJob?.cancel()
+                promptJob = lifecycleScope.launch { delay(60_000); reminder = null }
+            }
+        }
         // Games starting: offer to watch or pin, instead of a passive pop-up.
         lifecycleScope.launch {
             SidelineApp.scores.alerts.collect { a ->
@@ -258,6 +267,7 @@ class PlayerActivity : ComponentActivity() {
                     ToastOverlay()
                     PinnedTicker()
                     StartPrompt()
+                    ReminderPrompt()
                     ScorePopupHost(skipStarts = true)
                     if (gamesPanel) GamesPanel()
                     if (subsPanel) SubtitlesPanel()
@@ -464,6 +474,22 @@ class PlayerActivity : ComponentActivity() {
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (event.action != KeyEvent.ACTION_DOWN) return super.dispatchKeyEvent(event)
         val liveMode = live && !catchUp
+        reminder?.let { r ->
+            when (event.keyCode) {
+                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
+                    reminder = null
+                    val c = repo.channel(r.channelKey)
+                    if (c == null) flash("That channel isn't in your list any more") else {
+                        if (!live) saveResume()
+                        vodKey = null; details = null; vodItem = null
+                        queue = listOf(c)
+                        tune(c)
+                    }
+                    return true
+                }
+                KeyEvent.KEYCODE_BACK -> { reminder = null; return true }
+            }
+        }
         prompt?.let { p ->
             when (event.keyCode) {
                 KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> { prompt = null; watchGame(p.game); return true }
@@ -747,6 +773,24 @@ class PlayerActivity : ComponentActivity() {
                         Text(p.game.title, color = C.Text, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
                     }
                     Text("OK  watch it now     ≡  pin the score     Back  dismiss", color = C.Muted, fontSize = 13.sp, modifier = Modifier.padding(top = 10.dp))
+                }
+            }
+        }
+    }
+
+    @Composable
+    private fun ReminderPrompt() {
+        Box(Modifier.fillMaxSize().padding(28.dp), contentAlignment = Alignment.TopEnd) {
+            AnimatedVisibility(visible = reminder != null, enter = fadeIn(), exit = fadeOut()) {
+                val r = reminder ?: return@AnimatedVisibility
+                Column(
+                    Modifier.width(420.dp).clip(RoundedCornerShape(16.dp)).background(Color(0xF0131A22))
+                        .border(2.dp, C.Accent, RoundedCornerShape(16.dp)).padding(18.dp),
+                ) {
+                    Text("🔔 Starting now", color = C.Accent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Text(r.title, color = C.Text, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = 2)
+                    Text(r.channelName, color = C.Muted, fontSize = 14.sp)
+                    Text("OK  switch to it     Back  dismiss", color = C.Muted, fontSize = 13.sp, modifier = Modifier.padding(top = 10.dp))
                 }
             }
         }

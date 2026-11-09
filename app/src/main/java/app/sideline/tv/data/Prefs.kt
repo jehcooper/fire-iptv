@@ -29,6 +29,20 @@ class Prefs(context: Context) {
     private val _followed = MutableStateFlow(sp.getStringSet("followed", emptySet())!!.toSet())
     val followedGames: StateFlow<Set<String>> = _followed
 
+    /** Series you've starred ("acc:seriesId"). */
+    private val _favSeries = MutableStateFlow(sp.getStringSet("favSeries", emptySet())!!.toSet())
+    val favSeries: StateFlow<Set<String>> = _favSeries
+    fun toggleFavSeries(key: String) = toggle(_favSeries, "favSeries", key)
+
+    /** Series you've watched an episode of, most recent first ("acc:seriesId"). */
+    private val _watchedSeries = MutableStateFlow(sp.getString("watchedSeries", "")!!.split(",").filter { it.isNotBlank() })
+    val watchedSeries: StateFlow<List<String>> = _watchedSeries
+    fun pushWatchedSeries(key: String) {
+        val l = (listOf(key) + _watchedSeries.value.filter { it != key }).take(60)
+        _watchedSeries.value = l
+        sp.edit().putString("watchedSeries", l.joinToString(",")).apply()
+    }
+
     /** Hidden categories: "live:acc:cat", "vod:acc:cat", "series:acc:cat". */
     private val _hiddenCats = MutableStateFlow(sp.getStringSet("hiddenCats", emptySet())!!.toSet())
     val hiddenCats: StateFlow<Set<String>> = _hiddenCats
@@ -65,6 +79,10 @@ class Prefs(context: Context) {
     val osUser: StateFlow<String> = _osUser
     private val _osPass = str("osPass", "")
     val osPass: StateFlow<String> = _osPass
+
+    private val _omdbKey = str("omdbKey", "")
+    val omdbKey: StateFlow<String> = _omdbKey
+    fun setOmdbKey(v: String) { _omdbKey.value = v.trim(); sp.edit().putString("omdbKey", v.trim()).apply() }
 
     private val _tmdbKey = str("tmdbKey", "")
     val tmdbKey: StateFlow<String> = _tmdbKey

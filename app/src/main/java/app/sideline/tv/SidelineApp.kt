@@ -18,9 +18,11 @@ class SidelineApp : Application(), ImageLoaderFactory {
         super.onCreate()
         Net.cacheDir = filesDir.resolve("xtream")
         prefs = Prefs(this)
+        app.sideline.tv.data.Omdb.init(this)
         repo = Repository(prefs)
         scores = ScoreWatcher(prefs)
         progress = WatchProgress(this)
+        reminders = app.sideline.tv.data.Reminders(this).also { it.start() }
         if (prefs.accounts.value.isNotEmpty()) repo.refresh()
         scores.start()
 
@@ -55,6 +57,7 @@ class SidelineApp : Application(), ImageLoaderFactory {
         lateinit var repo: Repository
         lateinit var scores: ScoreWatcher
         lateinit var progress: WatchProgress
+        lateinit var reminders: app.sideline.tv.data.Reminders
         @Volatile var foreground: Boolean = false
     }
 }

@@ -74,6 +74,8 @@ fun SettingsScreen() {
     var editOs by remember { mutableStateOf(false) }
     var manageCats by remember { mutableStateOf<String?>(null) }
     var editTmdb by remember { mutableStateOf(false) }
+    var editOmdb by remember { mutableStateOf(false) }
+    val omdbKey by prefs.omdbKey.collectAsState()
     val tmdbKey by prefs.tmdbKey.collectAsState()
     val hidden by prefs.hiddenCats.collectAsState()
 
@@ -182,7 +184,12 @@ fun SettingsScreen() {
                 Text("Audience ratings (PG-13, TV-MA, 14A…) come from your provider when it has them. Otherwise they come from TMDB, " +
                     "which needs a free key. TMDB also fills in missing descriptions.", color = C.Muted, fontSize = 14.sp)
                 Spacer(Modifier.height(8.dp))
-                Chip(if (tmdbKey.isBlank()) "Add TMDB key" else "TMDB: key saved", false, onClick = { editTmdb = true })
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Chip(if (tmdbKey.isBlank()) "Add TMDB key" else "TMDB: key saved", false, onClick = { editTmdb = true })
+                    Chip(if (omdbKey.isBlank()) "Add OMDb key (IMDb ratings)" else "OMDb: key saved", false, onClick = { editOmdb = true })
+                }
+                Text("IMDb ratings on series tiles come from OMDb (free key, 1,000 lookups a day; results are saved for a week). " +
+                    "Without it, tiles show your provider's own score marked ★.", color = C.Faint, fontSize = 13.sp, modifier = Modifier.padding(top = 6.dp))
             }
         }
 
@@ -230,7 +237,16 @@ fun SettingsScreen() {
     teamsFor?.let { id -> TeamPicker(id) { teamsFor = null } }
     if (editOs) OpenSubtitlesEditor { editOs = false }
     manageCats?.let { k -> CategoryManager(k) { manageCats = null } }
-    if (editTmdb) TmdbEditor { editTmdb = false }
+    if (editTmdb) KeyEditor(
+        "TMDB (The Movie Database)",
+        "Free key: sign up at themoviedb.org, then Settings → API → create a key (personal use). Paste either the API Key or the API Read Access Token.",
+        "TMDB API key or Read Access Token", prefs.tmdbKey.value, { prefs.setTmdbKey(it) },
+    ) { editTmdb = false }
+    if (editOmdb) KeyEditor(
+        "OMDb (IMDb ratings)",
+        "Free key: go to omdbapi.com → API Key → choose FREE, enter your email, and click the activation link they send. Then paste the key here.",
+        "OMDb API key", prefs.omdbKey.value, { prefs.setOmdbKey(it) },
+    ) { editOmdb = false }
 }
 
 @Composable
@@ -314,7 +330,11 @@ private fun AccountEditor(start: Account, isNew: Boolean, onDone: () -> Unit) {
                         }
                     })
                     Chip("Save without testing", false, onClick = { prefs.saveAccount(a); SidelineApp.repo.refresh(); onDone() })
-                    if (!isNew) Chip("Delete", false, onClick = { prefs.deleteAccount(a.id); SidelineApp.repo.refresh(); onDone() })
+                    if (!isNew) Chip("Delete", false, onClick = {
+                        Confirm.ask("Delete the account \"${start.name}\"?", "Its channels, movies and series disappear from the app.", "Delete", destructive = true) {
+                            prefs.deleteAccount(a.id); SidelineApp.repo.refresh(); onDone()
+                        }
+                    })
                     Chip("Cancel", false, onClick = onDone)
                 }
             }
@@ -354,7 +374,10 @@ private fun TeamPicker(leagueId: String, onDone: () -> Unit) {
                     }
                     items(list, key = { "$title-${it.id}" }) { t ->
                         val on = "$leagueId|${t.id}" in fav
-                        FocusCard(onClick = { prefs.toggleTeam(leagueId, t.id) }, modifier = Modifier.height(72.dp)) { _ ->
+                        FocusCard(onClick = {
+                            Confirm.ask(if (on) "Remove ${t.name} from your teams?" else "Add ${t.name} to your teams?",
+                                yes = if (on) "Remove" else "Add", destructive = on) { prefs.toggleTeam(leagueId, t.id) }
+                        }, modifier = Modifier.height(72.dp)) { _ ->
                             Row(
                                 Modifier.fillMaxSize().background(if (on) C.hex(t.color).copy(alpha = 0.45f) else C.Surface).padding(10.dp),
                                 verticalAlignment = Alignment.CenterVertically,
@@ -427,7 +450,11 @@ private fun CategoryManager(kind: String, onDone: () -> Unit) {
                 Text("✓ = shown. Select to switch. Back when done.", color = C.Muted, fontSize = 14.sp)
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(vertical = 10.dp)) {
                     Chip("Show all", false, onClick = { prefs.showAllCats("$kind:") }, modifier = Modifier.focusRequester(first))
-                    Chip("Hide all", false, onClick = { cats.forEach { c -> val k = "$kind:${c.accountId}:${c.id}"; if (k !in hidden) prefs.toggleHidden(k) } })
+                    Chip("Hide all", false, onClick = {
+                        Confirm.ask("Hide every category here?", yes = "Hide all", destructive = true) {
+                            cats.forEach { c -> val k = "$kind:${c.accountId}:${c.id}"; if (k !in hidden) prefs.toggleHidden(k) }
+                        }
+                    })
                 }
                 LazyVerticalGrid(
                     columns = GridCells.Adaptive(260.dp),
@@ -437,7 +464,10 @@ private fun CategoryManager(kind: String, onDone: () -> Unit) {
                     items(cats, key = { "${it.accountId}:${it.id}" }) { c ->
                         val k = "$kind:${c.accountId}:${c.id}"
                         val shown = k !in hidden
-                        Chip(if (shown) "✓ ${c.name}" else c.name, shown, onClick = { prefs.toggleHidden(k) })
+                        Chip(if (shown) "✓ ${c.name}" else c.name, shown, onClick = {
+                            if (shown) Confirm.ask("Hide \"${c.name}\"?", yes = "Hide", destructive = true) { prefs.toggleHidden(k) }
+                            else prefs.toggleHidden(k)
+                        })
                     }
                 }
             }
@@ -446,20 +476,18 @@ private fun CategoryManager(kind: String, onDone: () -> Unit) {
 }
 
 @Composable
-private fun TmdbEditor(onDone: () -> Unit) {
-    val prefs = SidelineApp.prefs
-    var key by remember { mutableStateOf(prefs.tmdbKey.value) }
+private fun KeyEditor(title: String, help: String, label: String, current: String, save: (String) -> Unit, onDone: () -> Unit) {
+    var key by remember { mutableStateOf(current) }
     val firstField = remember { FocusRequester() }
     LaunchedEffect(Unit) { delay(200); try { firstField.requestFocus() } catch (_: Exception) {} }
     TvDialog(onDone) {
         Box(Modifier.fillMaxSize().background(C.Bg.copy(alpha = 0.96f)), contentAlignment = Alignment.Center) {
             Column(Modifier.width(720.dp).clip(RoundedCornerShape(18.dp)).background(C.Surface).padding(32.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("TMDB (The Movie Database)", color = C.Text, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-                Text("Free key: sign up at themoviedb.org, then Settings → API → create a key (personal use). Paste either the API Key or the API Read Access Token.",
-                    color = C.Muted, fontSize = 14.sp)
-                Field("TMDB API key or Read Access Token", key, { key = it.trim() }, modifier = Modifier.focusRequester(firstField))
+                Text(title, color = C.Text, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                Text(help, color = C.Muted, fontSize = 14.sp)
+                Field(label, key, { key = it.trim() }, modifier = Modifier.focusRequester(firstField))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Chip("Save", true, onClick = { prefs.setTmdbKey(key); onDone() })
+                    Chip("Save", true, onClick = { save(key); onDone() })
                     Chip("Cancel", false, onClick = onDone)
                 }
             }

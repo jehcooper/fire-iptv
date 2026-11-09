@@ -23,6 +23,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -67,7 +68,7 @@ fun ProgramGuide(channels: List<Channel>) {
         Column(Modifier.fillMaxWidth().height(92.dp).clip(RoundedCornerShape(12.dp)).background(C.Surface).padding(horizontal = 16.dp, vertical = 10.dp)) {
             val f = focused
             if (f?.second == null) {
-                Text(f?.first?.name ?: "Move through the guide to see what's on. OK on a show that's on now plays it.",
+                Text(f?.first?.name ?: "Move through the guide to see what's on. OK: on now → watch · earlier → catch-up · later → reminder.",
                     color = C.Muted, fontSize = 14.sp, maxLines = 2)
             } else {
                 val p = f.second!!
@@ -108,7 +109,19 @@ fun ProgramGuide(channels: List<Channel>) {
                                     item == null || now in item.start until item.end -> Play.channel(ctx, c, channels)
                                     item.end <= now && c.hasArchive -> Play.catchUp(ctx, c, item)
                                     item.end <= now -> Play.channel(ctx, c, channels)
-                                    else -> { /* future: details already shown above */ }
+                                    else -> {
+                                        // Starts later: offer (or cancel) a reminder.
+                                        val r = app.sideline.tv.data.Reminder(c.key, c.name, item.title, item.start)
+                                        if (SidelineApp.reminders.has(c.key, item.start)) {
+                                            Confirm.ask("Cancel the reminder for \"${item.title}\"?", yes = "Cancel reminder", destructive = true) {
+                                                SidelineApp.reminders.remove(r)
+                                            }
+                                        } else {
+                                            Confirm.ask("Remind me when \"${item.title}\" starts?",
+                                                "${c.name} · ${dayTimeOf(item.start * 1000)}. A pop-up will offer to switch to it (while Cooper TV is open).",
+                                                yes = "🔔 Remind me") { SidelineApp.reminders.add(r) }
+                                        }
+                                    }
                                 }
                             })
                     }
@@ -129,6 +142,8 @@ private fun GuideRow(
     onFocus: (EpgItem?) -> Unit, onPick: (EpgItem?) -> Unit,
 ) {
     var items by remember(c.key) { mutableStateOf<List<EpgItem>?>(null) }
+    val allReminders by SidelineApp.reminders.list.collectAsState()
+    val reminderStarts = remember(allReminders, c.key) { allReminders.filter { it.channelKey == c.key }.map { it.start }.toSet() }
     LaunchedEffect(c.key) { items = SidelineApp.repo.epgCached(c) }
     val windowEnd = windowStart + windowLen
     val slots = remember(items, windowStart) {
@@ -177,6 +192,7 @@ private fun GuideRow(
                             fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
                         )
                         if (past && c.hasArchive) Text("⟲", color = C.Gold, fontSize = 11.sp, modifier = Modifier.align(Alignment.TopEnd))
+                        if (slot.item != null && slot.item.start in reminderStarts) Text("🔔", fontSize = 10.sp, modifier = Modifier.align(Alignment.TopEnd))
                     }
                 }
                 Spacer(Modifier.width(3.dp))

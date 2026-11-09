@@ -52,6 +52,10 @@ data class Movie(
     val categoryId: String,
     val ext: String,
     val rating: String?,
+    /** Release year when the provider gives it (or it's in the title), for "Latest releases". */
+    val year: Int? = null,
+    /** When the provider added it (epoch seconds). */
+    val added: Long = 0,
 ) {
     val key: String get() = "$accountId:$streamId"
 }

@@ -44,7 +44,7 @@ fun HomeScreen(goTo: (Tab) -> Unit) {
 
     if (accounts.isEmpty()) {
         Column(Modifier.fillMaxSize()) {
-            EmptyState("Welcome to Sideline", "Add your IPTV logins in Settings to get started.")
+            EmptyState("Welcome to Cooper TV", "Add your IPTV logins in Settings to get started.")
             Chip("Open Settings", selected = true, onClick = { goTo(Tab.Settings) }, modifier = Modifier.padding(start = 48.dp))
         }
         return
@@ -59,8 +59,18 @@ fun HomeScreen(goTo: (Tab) -> Unit) {
     val liveNow = remember(allGames, mine) { allGames.filter { it.isLive && it !in mine }.take(15) }
     val recentCh = remember(recent, channels) { recent.mapNotNull { repo.channel(it) } }
     val favList = remember(favCh, channels) { channels.filter { it.key in favCh } }
-    val latestMovies = remember(movies) { movies.takeLast(30).reversed() }
-    val latestSeries = remember(series) { series.takeLast(30).reversed() }
+    // Latest releases: newest release year first (then most recently added), when the provider gives years.
+    val latestMovies = remember(movies) {
+        if (movies.none { it.year != null }) movies.takeLast(30).reversed()
+        else movies.filter { it.year != null }.sortedWith(compareByDescending<app.sideline.tv.data.Movie> { it.year }.thenByDescending { it.added }).take(30)
+    }
+    // Your series: ones you've watched (most recent first), then ones you've starred.
+    val favSeries by prefs.favSeries.collectAsState()
+    val watchedSeries by prefs.watchedSeries.collectAsState()
+    val yourSeries = remember(series, favSeries, watchedSeries) {
+        val byKey = series.associateBy { "${it.accountId}:${it.seriesId}" }
+        (watchedSeries + favSeries).distinct().mapNotNull { byKey[it] }
+    }
 
     LazyColumn(
         contentPadding = PaddingValues(start = 48.dp, end = 48.dp, top = 16.dp, bottom = 60.dp),
@@ -109,19 +119,17 @@ fun HomeScreen(goTo: (Tab) -> Unit) {
         }
         if (movies.isNotEmpty()) item {
             Column {
-                SectionTitle("Movies")
+                SectionTitle("Latest movie releases")
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     items(latestMovies, key = { it.key }) { m -> PosterCard(m.name, m.poster, onClick = { openMovie = m }) }
                 }
             }
         }
-        if (series.isNotEmpty()) item {
+        if (yourSeries.isNotEmpty()) item {
             Column {
-                SectionTitle("Series")
+                SectionTitle("Your series")
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    items(latestSeries, key = { "${it.accountId}:${it.seriesId}" }) { s ->
-                        PosterCard(s.name, s.cover, onClick = { openSeries = s })
-                    }
+                    items(yourSeries, key = { "${it.accountId}:${it.seriesId}" }) { s -> SeriesTile(s, onClick = { openSeries = s }) }
                 }
             }
         }

@@ -96,8 +96,11 @@ class XtreamClient(val account: Account) {
 
     suspend fun vodStreams(fromCache: Boolean = false): List<Movie> = listCall("get_vod_streams", fromCache).arr()?.mapNotNull { it.obj() }?.mapNotNull { o ->
         val id = o.i("stream_id") ?: return@mapNotNull null
-        Movie(account.id, id, o.s("name") ?: "Movie $id", o.s("stream_icon"), o.s("category_id") ?: "",
-            o.s("container_extension") ?: "mp4", o.s("rating"))
+        val name = o.s("name") ?: "Movie $id"
+        val year = listOfNotNull(o.s("year"), o.s("release_date"), o.s("releaseDate"), name)
+            .firstNotNullOfOrNull { Regex("\\b(19[2-9]\\d|20[0-4]\\d)\\b").find(it)?.value?.toIntOrNull() }
+        Movie(account.id, id, name, o.s("stream_icon"), o.s("category_id") ?: "",
+            o.s("container_extension") ?: "mp4", o.s("rating"), year, o.l("added") ?: 0)
     } ?: emptyList()
 
     suspend fun series(fromCache: Boolean = false): List<Series> = listCall("get_series", fromCache).arr()?.mapNotNull { it.obj() }?.mapNotNull { o ->

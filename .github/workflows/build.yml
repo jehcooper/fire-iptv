@@ -26,6 +26,7 @@ jobs:
       - name: Build APK
         run: gradle :app:assembleRelease --stacktrace
 
+      # File keeps the name Sideline.apk so the Downloader address on the TV never changes.
       - name: Rename APK
         run: cp app/build/outputs/apk/release/app-release.apk Sideline.apk
 
@@ -38,6 +39,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
-          name: Sideline build ${{ github.run_number }}
+          name: Cooper TV build ${{ github.run_number }}
           files: Sideline.apk
           make_latest: "true"

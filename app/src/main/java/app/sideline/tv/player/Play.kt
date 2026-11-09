@@ -55,6 +55,7 @@ object Play {
 
     fun episode(ctx: Context, e: Episode, seriesName: String, seriesId: Int = 0, seriesCover: String? = null, fromStart: Boolean = false) {
         val url = SidelineApp.repo.client(e.accountId)?.episodeUrl(e) ?: return
+        if (seriesId != 0) SidelineApp.prefs.pushWatchedSeries("${e.accountId}:$seriesId")
         launch(ctx, Item.Vod(episodeKey(e), seriesName, url, "S${e.season} E${e.number} · ${e.title}", plot = e.plot, image = e.image,
             season = e.season, episode = e.number, episodeObj = e, seriesId = seriesId, seriesCover = seriesCover, fromStart = fromStart))
     }

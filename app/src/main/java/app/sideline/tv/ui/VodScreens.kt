@@ -80,6 +80,7 @@ private fun <T> VodBrowser(
     val hidden by prefs.hiddenCats.collectAsState()
     var selected by rememberSaveable { mutableStateOf(if (continueItems.isNotEmpty()) CONTINUE else ALL) }
     var query by rememberSaveable { mutableStateOf("") }
+    var searching by remember { mutableStateOf(false) }
     if (all.isEmpty()) {
         EmptyState(emptyTitle, "Add an account with \"On-demand\" ticked in Settings, or wait for loading to finish.")
         return
@@ -104,15 +105,27 @@ private fun <T> VodBrowser(
             }
         }
     }
+    if (searching) SearchDialog(query, if (kind == "vod") "Search movies" else "Search series",
+        onSearch = { query = it; selected = FIND; searching = false }, onDismiss = { searching = false })
+
     Row(Modifier.fillMaxSize().padding(start = 48.dp, end = 32.dp, top = 8.dp)) {
         LazyColumn(Modifier.width(280.dp), verticalArrangement = Arrangement.spacedBy(4.dp), contentPadding = PaddingValues(bottom = 60.dp)) {
             if (continueItems.isNotEmpty()) item { CategoryItem("▶ Continue watching  (${continueItems.size})", selected == CONTINUE) { selected = CONTINUE } }
-            item { CategoryItem("🔍 Search", selected == FIND) { selected = FIND } }
+            item {
+                CategoryItem("🔍 Search", selected == FIND, selectOnFocus = false) {
+                    selected = FIND
+                    if (query.isBlank()) searching = true
+                }
+            }
             item { CategoryItem("All A–Z  (${visibleAll.size})", selected == EVERYTHING) { selected = EVERYTHING } }
             item { CategoryItem("Recently added", selected == ALL) { selected = ALL } }
             items(visibleCats, key = { "${it.accountId}:${it.id}" }) { c ->
                 val k = "${c.accountId}:${c.id}"
-                CategoryItem("${c.name}  (${counts[k] ?: 0})", selected == k, onMenu = { prefs.toggleHidden("$kind:$k") }) { selected = k }
+                CategoryItem("${c.name}  (${counts[k] ?: 0})", selected == k, onMenu = {
+                    Confirm.ask("Hide \"${c.name}\"?", "You can show it again in Settings → Show or hide categories.", "Hide", destructive = true) {
+                        prefs.toggleHidden("$kind:$k")
+                    }
+                }) { selected = k }
             }
             item {
                 Text("Menu (≡) on a category hides it. Bring hidden ones back in Settings.", color = C.Faint, fontSize = 12.sp,
@@ -122,7 +135,7 @@ private fun <T> VodBrowser(
         Spacer(Modifier.width(24.dp))
         Column(Modifier.weight(1f)) {
             if (selected == FIND) {
-                SearchBox(query, { query = it }, "Search all titles in every category")
+                SearchButton(query, "Search all titles in every category", onClick = { searching = true })
                 Spacer(Modifier.height(10.dp))
             }
             if (selected == CONTINUE) {
@@ -151,7 +164,9 @@ private fun <T> VodBrowser(
 /** A started movie or episode: image, how far in, and time left. Menu removes it from the list. */
 @Composable
 fun ProgressCard(p: ProgressEntry, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    FocusCard(onClick = onClick, onMenu = { SidelineApp.progress.remove(p.key) }, modifier = modifier.width(240.dp).height(150.dp)) { f ->
+    FocusCard(onClick = onClick, onMenu = {
+        Confirm.ask("Remove \"${p.title}\" from Continue watching?", yes = "Remove", destructive = true) { SidelineApp.progress.remove(p.key) }
+    }, modifier = modifier.width(240.dp).height(150.dp)) { f ->
         AsyncImage(model = p.image, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xF00B0F14)))))
         Column(Modifier.align(Alignment.BottomStart).padding(10.dp)) {
@@ -256,7 +271,7 @@ fun SeriesScreen() {
     VodBrowser(
         "series", "No series yet", cats, series,
         catOf = { "${it.accountId}:${it.categoryId}" }, nameOf = { it.name }, keyOf = { "${it.accountId}:${it.seriesId}" }, continueItems = cont,
-    ) { s -> PosterCard(s.name, s.cover, onClick = { open = s }) }
+    ) { s -> SeriesTile(s, onClick = { open = s }) }
     open?.let { SeriesSheet(it) { open = null } }
 }
 
@@ -275,7 +290,18 @@ fun SeriesSheet(s: Series, onDismiss: () -> Unit) {
     }
     DetailSheet(s.cover, onDismiss) {
         Text(s.name, color = C.Text, fontSize = 32.sp, fontWeight = FontWeight.Bold)
-        rating?.takeIf { it.isNotBlank() }?.let { Box(Modifier.padding(top = 6.dp)) { RatingBadge(it) } }
+        val favs by SidelineApp.prefs.favSeries.collectAsState()
+        val favKey = "${s.accountId}:${s.seriesId}"
+        val imdb = ratingBadge(s.name, "series", s.rating)
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 6.dp)) {
+            rating?.takeIf { it.isNotBlank() }?.let { RatingBadge(it); Spacer(Modifier.width(10.dp)) }
+            imdb?.let { Text(it, color = C.Gold, fontSize = 15.sp, fontWeight = FontWeight.SemiBold); Spacer(Modifier.width(14.dp)) }
+            val fav = favKey in favs
+            Chip(if (fav) "★ In favourites" else "☆ Add to favourites", fav, onClick = {
+                Confirm.ask(if (fav) "Remove ${s.name} from favourite series?" else "Add ${s.name} to favourite series?",
+                    yes = if (fav) "Remove" else "Add", destructive = fav) { SidelineApp.prefs.toggleFavSeries(favKey) }
+            })
+        }
         if (!s.plot.isNullOrBlank()) Text(s.plot, color = C.Muted, fontSize = 15.sp, maxLines = 3, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 8.dp))
         Spacer(Modifier.height(16.dp))
         val eps = episodes
@@ -309,4 +335,35 @@ fun SeriesSheet(s: Series, onDismiss: () -> Unit) {
 fun RatingBadge(text: String) {
     Text(text, color = C.Text, fontSize = 13.sp, fontWeight = FontWeight.Bold,
         modifier = Modifier.border(1.5.dp, C.Muted, RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 1.dp))
+}
+
+/** IMDb rating for a title (via OMDb, if a key is set), or the provider's own score marked ★. */
+@Composable
+fun ratingBadge(title: String, type: String, providerRating: String?): String? {
+    val clean = remember(title) { MovieInfoService.cleanTitle(title) }
+    val imdb by produceState(initialValue = app.sideline.tv.data.Omdb.cached(clean.first, type), clean) {
+        if (value == null) value = app.sideline.tv.data.Omdb.rating(clean.first, type, if (type == "movie") clean.second else null)
+    }
+    return when {
+        !imdb.isNullOrBlank() -> "IMDb $imdb"
+        !providerRating.isNullOrBlank() && providerRating != "0" -> "★ ${providerRating.take(3)}"
+        else -> null
+    }
+}
+
+/** Series poster with its IMDb rating; Menu adds/removes it from your favourite series. */
+@Composable
+fun SeriesTile(s: Series, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val prefs = SidelineApp.prefs
+    val favs by prefs.favSeries.collectAsState()
+    val key = "${s.accountId}:${s.seriesId}"
+    val fav = key in favs
+    PosterCard(
+        (if (fav) "★ " else "") + s.name, s.cover, onClick = onClick, modifier = modifier,
+        badge = ratingBadge(s.name, "series", s.rating),
+        onMenu = {
+            Confirm.ask(if (fav) "Remove ${s.name} from favourite series?" else "Add ${s.name} to favourite series?",
+                yes = if (fav) "Remove" else "Add", destructive = fav) { prefs.toggleFavSeries(key) }
+        },
+    )
 }

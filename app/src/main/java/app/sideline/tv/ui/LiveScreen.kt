@@ -64,8 +64,9 @@ fun SearchBox(value: String, onChange: (String) -> Unit, hint: String, modifier:
 }
 
 @Composable
-fun CategoryItem(name: String, selected: Boolean, onMenu: (() -> Unit)? = null, onClick: () -> Unit) {
-    FocusCard(onClick = onClick, onFocus = onClick, onMenu = onMenu, modifier = Modifier.fillMaxWidth(), scaleOnFocus = 1.02f, shape = RoundedCornerShape(10.dp)) { f ->
+fun CategoryItem(name: String, selected: Boolean, onMenu: (() -> Unit)? = null, selectOnFocus: Boolean = true, onClick: () -> Unit) {
+    // Ordinary categories open as you move over them; special entries (guide, search) need an OK press.
+    FocusCard(onClick = onClick, onFocus = if (selectOnFocus) onClick else null, onMenu = onMenu, modifier = Modifier.fillMaxWidth(), scaleOnFocus = 1.02f, shape = RoundedCornerShape(10.dp)) { f ->
         Text(
             name, color = if (selected || f) C.Text else C.Muted, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
@@ -91,6 +92,7 @@ fun LiveScreen() {
     var selected by rememberSaveable { mutableStateOf(if (favs.isNotEmpty()) FAV else "") }
     var query by rememberSaveable { mutableStateOf("") }
     var guide by rememberSaveable { mutableStateOf(false) }
+    var searching by remember { mutableStateOf(false) }
     var focusedCh by remember { mutableStateOf<Channel?>(null) }
     val counts = remember(channels) { channels.groupingBy { "${it.accountId}:${it.categoryId}" }.eachCount() }
     var epg by remember { mutableStateOf<List<EpgItem>>(emptyList()) }
@@ -145,14 +147,25 @@ fun LiveScreen() {
         return
     }
 
+    if (searching) SearchDialog(query, "Search channels", onSearch = { query = it; selected = SEARCH; searching = false }, onDismiss = { searching = false })
+
     Row(Modifier.fillMaxSize().padding(start = 48.dp, end = 48.dp, top = 8.dp)) {
         LazyColumn(Modifier.width(300.dp), verticalArrangement = Arrangement.spacedBy(4.dp), contentPadding = PaddingValues(bottom = 60.dp)) {
-            item { CategoryItem("📺 TV guide view", false) { guide = true } }
-            item { CategoryItem("🔍 Search", selected == SEARCH) { selected = SEARCH } }
+            item { CategoryItem("📺 TV guide view", false, selectOnFocus = false) { guide = true } }
+            item {
+                CategoryItem("🔍 Search", selected == SEARCH, selectOnFocus = false) {
+                    selected = SEARCH
+                    if (query.isBlank()) searching = true
+                }
+            }
             item { CategoryItem("★ Favourites (${favs.size})", selected == FAV) { selected = FAV } }
             item { CategoryItem("⟲ Recent (${recent.size})", selected == RECENT) { selected = RECENT } }
             items(cats, key = { "${it.accountId}:${it.id}" }) { c ->
-                CategoryItem(catLabel(c), selected == "${c.accountId}:${c.id}", onMenu = { prefs.toggleHidden("live:${c.accountId}:${c.id}") }) {
+                CategoryItem(catLabel(c), selected == "${c.accountId}:${c.id}", onMenu = {
+                    Confirm.ask("Hide \"${c.name}\"?", "You can show it again in Settings → Show or hide categories.", "Hide", destructive = true) {
+                        prefs.toggleHidden("live:${c.accountId}:${c.id}")
+                    }
+                }) {
                     selected = "${c.accountId}:${c.id}"
                 }
             }
@@ -183,12 +196,12 @@ fun LiveScreen() {
             }
             Spacer(Modifier.height(14.dp))
             if (selected == SEARCH) {
-                SearchBox(query, { query = it }, "Type a channel name")
+                SearchButton(query, "Search channels", onClick = { searching = true })
                 Spacer(Modifier.height(10.dp))
             }
             if (list.isEmpty()) {
                 Text(
-                    when (selected) { FAV -> "No favourites yet. Press Menu (≡) on any channel to add it."; SEARCH -> "Type at least 2 letters."; else -> "Nothing here." },
+                    when (selected) { FAV -> "No favourites yet. Press Menu (≡) on any channel to add it."; SEARCH -> "Select the search bar above and type at least 2 letters."; else -> "Nothing here." },
                     color = C.Muted, modifier = Modifier.padding(16.dp),
                 )
             }
@@ -197,7 +210,13 @@ fun LiveScreen() {
                     FocusCard(
                         onClick = { Play.channel(ctx, c, list) },
                         onFocus = { focusedCh = c },
-                        onMenu = { prefs.toggleFavChannel(c.key) },
+                        onMenu = {
+                            val isFav = c.key in favs
+                            Confirm.ask(
+                                if (isFav) "Remove ${c.name} from favourites?" else "Add ${c.name} to favourites?",
+                                yes = if (isFav) "Remove" else "Add", destructive = isFav,
+                            ) { prefs.toggleFavChannel(c.key) }
+                        },
                         modifier = Modifier.fillMaxWidth(), scaleOnFocus = 1.02f, shape = RoundedCornerShape(10.dp),
                     ) { _ ->
                         Row(Modifier.padding(horizontal = 14.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {

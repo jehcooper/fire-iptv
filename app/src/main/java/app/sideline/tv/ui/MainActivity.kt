@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -58,7 +59,11 @@ private fun Root() {
                 Modifier.fillMaxWidth().padding(start = 48.dp, end = 48.dp, top = 24.dp, bottom = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("SIDELINE", color = C.Accent, fontSize = 22.sp, fontWeight = FontWeight.Black)
+                androidx.compose.foundation.Image(
+                    painter = androidx.compose.ui.res.painterResource(app.sideline.tv.R.drawable.logo_wordmark),
+                    contentDescription = "Cooper TV",
+                    modifier = Modifier.height(36.dp),
+                )
                 Spacer(Modifier.width(36.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Tab.entries.forEach { t -> Chip(t.label, selected = t == tab, onClick = { tab = t }) }
@@ -80,6 +85,8 @@ private fun Root() {
             }
         }
         ScorePopupHost()
+        ReminderHost()
+        ConfirmHost()
     }
 }
 
