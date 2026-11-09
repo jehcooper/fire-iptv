@@ -29,6 +29,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -64,9 +67,12 @@ fun SearchBox(value: String, onChange: (String) -> Unit, hint: String, modifier:
 }
 
 @Composable
-fun CategoryItem(name: String, selected: Boolean, onMenu: (() -> Unit)? = null, selectOnFocus: Boolean = true, onClick: () -> Unit) {
+fun CategoryItem(
+    name: String, selected: Boolean, onMenu: (() -> Unit)? = null, selectOnFocus: Boolean = true,
+    modifier: Modifier = Modifier, onClick: () -> Unit,
+) {
     // Ordinary categories open as you move over them; special entries (guide, search) need an OK press.
-    FocusCard(onClick = onClick, onFocus = if (selectOnFocus) onClick else null, onMenu = onMenu, modifier = Modifier.fillMaxWidth(), scaleOnFocus = 1.02f, shape = RoundedCornerShape(10.dp)) { f ->
+    FocusCard(onClick = onClick, onFocus = if (selectOnFocus) onClick else null, onMenu = onMenu, modifier = modifier.fillMaxWidth(), scaleOnFocus = 1.02f, shape = RoundedCornerShape(10.dp)) { f ->
         Text(
             name, color = if (selected || f) C.Text else C.Muted, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
@@ -93,6 +99,7 @@ fun LiveScreen() {
     var query by rememberSaveable { mutableStateOf("") }
     var guide by rememberSaveable { mutableStateOf(false) }
     var searching by remember { mutableStateOf(false) }
+    val searchBar = remember { FocusRequester() }
     var focusedCh by remember { mutableStateOf<Channel?>(null) }
     val counts = remember(channels) { channels.groupingBy { "${it.accountId}:${it.categoryId}" }.eachCount() }
     var epg by remember { mutableStateOf<List<EpgItem>>(emptyList()) }
@@ -153,9 +160,12 @@ fun LiveScreen() {
         LazyColumn(Modifier.width(300.dp), verticalArrangement = Arrangement.spacedBy(4.dp), contentPadding = PaddingValues(bottom = 60.dp)) {
             item { CategoryItem("📺 TV guide view", false, selectOnFocus = false) { guide = true } }
             item {
-                CategoryItem("🔍 Search", selected == SEARCH, selectOnFocus = false) {
+                // OK always opens the search window (with the last search filled in);
+                // ▶ goes straight to the search bar on the right.
+                CategoryItem("🔍 Search", selected == SEARCH, selectOnFocus = false,
+                    modifier = Modifier.focusProperties { if (selected == SEARCH) right = searchBar }) {
                     selected = SEARCH
-                    if (query.isBlank()) searching = true
+                    searching = true
                 }
             }
             item { CategoryItem("★ Favourites (${favs.size})", selected == FAV) { selected = FAV } }
@@ -196,7 +206,7 @@ fun LiveScreen() {
             }
             Spacer(Modifier.height(14.dp))
             if (selected == SEARCH) {
-                SearchButton(query, "Search channels", onClick = { searching = true })
+                SearchButton(query, "Search channels", onClick = { searching = true }, modifier = Modifier.focusRequester(searchBar))
                 Spacer(Modifier.height(10.dp))
             }
             if (list.isEmpty()) {

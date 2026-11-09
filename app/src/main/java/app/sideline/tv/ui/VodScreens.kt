@@ -33,6 +33,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
@@ -81,6 +82,7 @@ private fun <T> VodBrowser(
     var selected by rememberSaveable { mutableStateOf(if (continueItems.isNotEmpty()) CONTINUE else ALL) }
     var query by rememberSaveable { mutableStateOf("") }
     var searching by remember { mutableStateOf(false) }
+    val searchBar = remember { FocusRequester() }
     if (all.isEmpty()) {
         EmptyState(emptyTitle, "Add an account with \"On-demand\" ticked in Settings, or wait for loading to finish.")
         return
@@ -112,9 +114,12 @@ private fun <T> VodBrowser(
         LazyColumn(Modifier.width(280.dp), verticalArrangement = Arrangement.spacedBy(4.dp), contentPadding = PaddingValues(bottom = 60.dp)) {
             if (continueItems.isNotEmpty()) item { CategoryItem("▶ Continue watching  (${continueItems.size})", selected == CONTINUE) { selected = CONTINUE } }
             item {
-                CategoryItem("🔍 Search", selected == FIND, selectOnFocus = false) {
+                // OK always opens the search window (with the last search filled in);
+                // ▶ goes straight to the search bar on the right.
+                CategoryItem("🔍 Search", selected == FIND, selectOnFocus = false,
+                    modifier = Modifier.focusProperties { if (selected == FIND) right = searchBar }) {
                     selected = FIND
-                    if (query.isBlank()) searching = true
+                    searching = true
                 }
             }
             item { CategoryItem("All A–Z  (${visibleAll.size})", selected == EVERYTHING) { selected = EVERYTHING } }
@@ -135,7 +140,7 @@ private fun <T> VodBrowser(
         Spacer(Modifier.width(24.dp))
         Column(Modifier.weight(1f)) {
             if (selected == FIND) {
-                SearchButton(query, "Search all titles in every category", onClick = { searching = true })
+                SearchButton(query, "Search all titles in every category", onClick = { searching = true }, modifier = Modifier.focusRequester(searchBar))
                 Spacer(Modifier.height(10.dp))
             }
             if (selected == CONTINUE) {
