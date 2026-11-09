@@ -136,6 +136,10 @@ class PlayerActivity : ComponentActivity() {
     private var playerView: PlayerView? = null
     private var paused by mutableStateOf(false)
     private var gamesPanel by mutableStateOf(false)
+    /** OK while watching live: channel list over the picture. */
+    private var channelPanel by mutableStateOf(false)
+    /** When live TV was paused (ms), or null if not paused. */
+    private var pausedAt by mutableStateOf<Long?>(null)
     /** "Game starting" prompt: OK = watch it, Menu = pin the score. */
     private var prompt by mutableStateOf<ScoreAlert?>(null)
     private var promptJob: Job? = null
@@ -164,7 +168,14 @@ class PlayerActivity : ComponentActivity() {
                 out.add(TextRenderer(output, outputLooper).apply { experimentalSetLegacyDecodingEnabled(true) })
             }
         }
+        // Big enough buffer to hold about 5 minutes of a paused live channel (capped at 160 MB of memory).
+        val loadControl = androidx.media3.exoplayer.DefaultLoadControl.Builder()
+            .setBufferDurationsMs(15_000, 330_000, 2_500, 5_000)
+            .setTargetBufferBytes(160 * 1024 * 1024)
+            .setPrioritizeTimeOverSizeThresholds(false)
+            .build()
         player = ExoPlayer.Builder(this, renderers)
+            .setLoadControl(loadControl)
             .setMediaSourceFactory(
                 // DefaultDataSource: streams go through OkHttp, but local files (downloaded subtitles) can be read too.
                 // Using OkHttp alone made downloaded subtitles fail with ERROR_CODE_FAILED_RUNTIME_CHECK.
@@ -270,6 +281,9 @@ class PlayerActivity : ComponentActivity() {
                     ReminderPrompt()
                     ScorePopupHost(skipStarts = true)
                     if (gamesPanel) GamesPanel()
+                    if (channelPanel) ChannelPanel()
+                    app.sideline.tv.ui.ChannelMenuHost()
+                    app.sideline.tv.ui.ConfirmHost()
                     if (subsPanel) SubtitlesPanel()
                 }
             }
@@ -519,7 +533,7 @@ class PlayerActivity : ComponentActivity() {
             KeyEvent.KEYCODE_MEDIA_REWIND -> { if (liveMode) watchFromStart() else seekBy(-10_000); return true }
             KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> { if (!liveMode) seekBy(30_000); return true }
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
-                if (liveMode) { showInfo = !showInfo; if (showInfo) showInfoBriefly() } else togglePause()
+                if (liveMode) channelPanel = true else togglePause()
                 return true
             }
             KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, KeyEvent.KEYCODE_MEDIA_PLAY, KeyEvent.KEYCODE_MEDIA_PAUSE -> { togglePause(); return true }
@@ -532,8 +546,53 @@ class PlayerActivity : ComponentActivity() {
     }
 
     private fun togglePause() {
-        player.playWhenReady = !player.playWhenReady
-        showInfoBriefly()
+        val liveMode = live && !catchUp
+        if (!liveMode) {
+            player.playWhenReady = !player.playWhenReady
+            showInfoBriefly()
+            return
+        }
+        // ---- Live TV ----
+        if (player.playWhenReady) {
+            player.playWhenReady = false
+            pausedAt = System.currentTimeMillis()
+            showInfo = true
+            flash(if (current?.hasArchive == true) "Paused. Resume any time (this channel has catch-up)." else "Paused. Resume within about 5 minutes to carry on from here.")
+            return
+        }
+        val c = current
+        val since = pausedAt
+        pausedAt = null
+        val away = if (since == null) 0L else System.currentTimeMillis() - since
+        when {
+            // Catch-up channel paused for a while: continue from the exact moment via the provider's archive.
+            c != null && since != null && c.hasArchive && away > 20_000 -> resumeFromArchive(c, since)
+            away <= 5 * 60_000 -> { player.playWhenReady = true; showInfoBriefly() }
+            c != null -> { tune(c); flash("Paused for over 5 minutes, so you're back to live.") }
+        }
+    }
+
+    /** Plays a catch-up channel from [sinceMs] (when you paused), using the provider's archive. */
+    private fun resumeFromArchive(c: Channel, sinceMs: Long) {
+        val client = repo.client(c.accountId) ?: return
+        // The archive wants the provider's local time; work out its offset from a guide entry.
+        val sample = epg.firstOrNull { it.startRaw.length >= 16 && it.start > 0 }
+        val offsetSec = sample?.let {
+            try {
+                val f = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.US).apply { timeZone = java.util.TimeZone.getTimeZone("UTC") }
+                (f.parse(it.startRaw.substring(0, 16))!!.time / 1000) - it.start
+            } catch (_: Exception) { null }
+        } ?: (java.util.TimeZone.getDefault().getOffset(sinceMs) / 1000).toLong()
+        val local = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US)
+            .apply { timeZone = java.util.TimeZone.getTimeZone("UTC") }
+            .format(java.util.Date(sinceMs + offsetSec * 1000))
+        val url = client.timeshiftUrl(c, local, 240)
+        if (url == null) { player.playWhenReady = true; return }
+        catchUp = true
+        val mins = ((System.currentTimeMillis() - sinceMs) / 60_000).coerceAtLeast(1)
+        title = "${c.name} · $mins min behind live"
+        start(url)
+        flash("Carrying on from where you paused. Press Back to jump to live.")
     }
 
     private fun seekBy(ms: Long) {
@@ -544,7 +603,7 @@ class PlayerActivity : ComponentActivity() {
     private fun showInfoBriefly() {
         showInfo = true
         infoJob?.cancel()
-        infoJob = lifecycleScope.launch { delay(5_000); if (player.playWhenReady) showInfo = false }
+        infoJob = lifecycleScope.launch { delay(5_000); if (player.playWhenReady && pausedAt == null) showInfo = false }
     }
 
     private fun flash(msg: String) {
@@ -671,7 +730,8 @@ class PlayerActivity : ComponentActivity() {
                         if (next != null) Text("Next  ${timeOf(next.start * 1000)}  ${next.title}", color = C.Muted, fontSize = 15.sp, maxLines = 1)
                         Text(
                             buildString {
-                                append("▲▼ channels   ◀ previous channel")
+                                if (pausedAt != null) append("⏸ PAUSED · Play to resume     ")
+                                append("OK channel list   ▲▼ channels   ◀ previous channel   ⏯ pause")
                                 if (current?.hasArchive == true) append("   ⏪ watch from start")
                                 append("   ≡ games & scores")
                             },
@@ -791,6 +851,99 @@ class PlayerActivity : ComponentActivity() {
                     Text(r.title, color = C.Text, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = 2)
                     Text(r.channelName, color = C.Muted, fontSize = 14.sp)
                     Text("OK  switch to it     Back  dismiss", color = C.Muted, fontSize = 13.sp, modifier = Modifier.padding(top = 10.dp))
+                }
+            }
+        }
+    }
+
+    /**
+     * OK while watching live (like TiviMate): groups on the left, channels with what's on now and a progress
+     * bar on the right. OK switches channel; Menu (≡) on a channel = favourite / rename / move / hide.
+     */
+    @Composable
+    private fun ChannelPanel() {
+        val favs by prefs.favChannels.collectAsState()
+        val favOrder by prefs.favOrder.collectAsState()
+        val hiddenCats by prefs.hiddenCats.collectAsState()
+        val cats by repo.liveCategories.collectAsState()
+        val channels by repo.channels.collectAsState()
+        val recent by prefs.recentChannels.collectAsState()
+        val cur = current
+        val curCat = cur?.let { "${it.accountId}:${it.categoryId}" }
+        var group by remember { mutableStateOf(if (queue.size > 1) "__queue" else (curCat ?: "__fav")) }
+        val groups = remember(cats, hiddenCats) {
+            listOf("__queue" to "▶ Now playing list", "__fav" to "★ Favourites", "__recent" to "⟲ Recent") +
+                cats.filter { "live:${it.accountId}:${it.id}" !in hiddenCats }.map { "${it.accountId}:${it.id}" to it.name }
+        }
+        val list = remember(group, channels, favs, favOrder, recent) {
+            when (group) {
+                "__queue" -> queue.mapNotNull { repo.channel(it.key) ?: it }
+                "__fav" -> prefs.orderedFavs().mapNotNull { repo.channel(it) }
+                "__recent" -> recent.mapNotNull { repo.channel(it) }
+                else -> channels.filter { "${it.accountId}:${it.categoryId}" == group }
+            }
+        }
+        val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+        val curFocus = remember { FocusRequester() }
+        LaunchedEffect(Unit) {
+            val i = list.indexOfFirst { it.key == cur?.key }
+            if (i > 0) listState.scrollToItem((i - 2).coerceAtLeast(0))
+            delay(200)
+            try { curFocus.requestFocus() } catch (_: Exception) {}
+        }
+        TvDialog({ channelPanel = false }) {
+            Row(Modifier.fillMaxSize()) {
+                Row(Modifier.fillMaxHeight().width(820.dp).background(Color(0xF20B0F14)).padding(start = 28.dp, top = 24.dp, end = 16.dp)) {
+                    LazyColumn(Modifier.width(220.dp), verticalArrangement = Arrangement.spacedBy(4.dp), contentPadding = PaddingValues(bottom = 40.dp)) {
+                        items(groups, key = { it.first }) { (k, name) ->
+                            app.sideline.tv.ui.CategoryItem(name, group == k) { group = k }
+                        }
+                    }
+                    Spacer(Modifier.width(16.dp))
+                    LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(4.dp), contentPadding = PaddingValues(bottom = 40.dp)) {
+                        items(list, key = { it.key }) { c ->
+                            PanelChannelRow(c, c.key == cur?.key, c.key in favs,
+                                modifier = if (c.key == cur?.key) Modifier.focusRequester(curFocus) else Modifier,
+                                onClick = {
+                                    channelPanel = false
+                                    queue = list
+                                    if (c.key != cur?.key) tune(c)
+                                },
+                                onMenu = { app.sideline.tv.ui.ChannelMenu.open(c, inFavourites = group == "__fav") })
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @Composable
+    private fun PanelChannelRow(c: Channel, playing: Boolean, fav: Boolean, modifier: Modifier, onClick: () -> Unit, onMenu: () -> Unit) {
+        var now by remember(c.key) { mutableStateOf<EpgItem?>(null) }
+        LaunchedEffect(c.key) {
+            delay(150) // let fast scrolling skip rows
+            val t = System.currentTimeMillis() / 1000
+            now = repo.epgCached(c).firstOrNull { t in it.start until it.end }
+        }
+        FocusCard(onClick = onClick, onMenu = onMenu, modifier = modifier.fillMaxWidth().height(62.dp), scaleOnFocus = 1.02f,
+            shape = RoundedCornerShape(10.dp)) { _ ->
+            Row(Modifier.fillMaxSize().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                AsyncImage(model = c.logo, contentDescription = null, modifier = Modifier.size(width = 56.dp, height = 32.dp))
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (playing) { Text("▶ ", color = C.Accent, fontSize = 13.sp) }
+                        Text(c.name, color = if (playing) C.Accent else C.Text, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        if (fav) Text("  ★", color = C.Gold, fontSize = 13.sp)
+                    }
+                    val p = now
+                    if (p != null) {
+                        Text(p.title, color = C.Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        val frac = ((System.currentTimeMillis() / 1000 - p.start).toFloat() / (p.end - p.start).coerceAtLeast(1)).coerceIn(0f, 1f)
+                        Box(Modifier.padding(top = 3.dp).fillMaxWidth().height(2.dp).background(C.Surface2)) {
+                            Box(Modifier.fillMaxWidth(frac).height(2.dp).background(C.Accent))
+                        }
+                    }
                 }
             }
         }

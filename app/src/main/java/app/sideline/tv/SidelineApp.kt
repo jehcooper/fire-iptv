@@ -20,6 +20,7 @@ class SidelineApp : Application(), ImageLoaderFactory {
         prefs = Prefs(this)
         app.sideline.tv.data.Omdb.init(this)
         repo = Repository(prefs)
+        prefs.onChannelEdit = { repo.applyEdits() }
         scores = ScoreWatcher(prefs)
         progress = WatchProgress(this)
         reminders = app.sideline.tv.data.Reminders(this).also { it.start() }

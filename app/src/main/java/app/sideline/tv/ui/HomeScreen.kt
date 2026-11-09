@@ -1,6 +1,15 @@
 package app.sideline.tv.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.material3.Text
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -58,7 +67,8 @@ fun HomeScreen(goTo: (Tab) -> Unit) {
     }
     val liveNow = remember(allGames, mine) { allGames.filter { it.isLive && it !in mine }.take(15) }
     val recentCh = remember(recent, channels) { recent.mapNotNull { repo.channel(it) } }
-    val favList = remember(favCh, channels) { channels.filter { it.key in favCh } }
+    val favOrder by prefs.favOrder.collectAsState()
+    val favList = remember(favCh, favOrder, channels) { prefs.orderedFavs().mapNotNull { repo.channel(it) } }
     // Latest releases: newest release year first (then most recently added), when the provider gives years.
     val latestMovies = remember(movies) {
         if (movies.none { it.year != null }) movies.takeLast(30).reversed()
@@ -85,6 +95,14 @@ fun HomeScreen(goTo: (Tab) -> Unit) {
                 }
             }
         }
+        if (favList.isNotEmpty()) item {
+            Column {
+                SectionTitle("On now · your favourites")
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    items(favList, key = { it.key }) { c -> OnNowCard(c, onClick = { Play.channel(ctx, c, favList) }) }
+                }
+            }
+        }
         if (mine.isNotEmpty()) item {
             Column {
                 SectionTitle("My Teams & followed games")
@@ -106,14 +124,6 @@ fun HomeScreen(goTo: (Tab) -> Unit) {
                 SectionTitle("Recently watched")
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     items(recentCh, key = { it.key }) { c -> PosterCard(c.name, c.logo, wide = true, onClick = { Play.channel(ctx, c, recentCh) }) }
-                }
-            }
-        }
-        if (favList.isNotEmpty()) item {
-            Column {
-                SectionTitle("Favourite channels")
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    items(favList, key = { it.key }) { c -> PosterCard(c.name, c.logo, wide = true, onClick = { Play.channel(ctx, c, favList) }) }
                 }
             }
         }
@@ -144,4 +154,41 @@ fun HomeScreen(goTo: (Tab) -> Unit) {
     openGame?.let { g -> GameSheet(g, onDismiss = { openGame = null }) }
     openMovie?.let { m -> MovieSheet(m) { openMovie = null } }
     openSeries?.let { s -> SeriesSheet(s) { openSeries = null } }
+}
+
+/** Favourite channel with what's on now and how far through it is. Menu (≡) = channel options. */
+@Composable
+fun OnNowCard(c: app.sideline.tv.data.Channel, onClick: () -> Unit) {
+    val guideVersion by app.sideline.tv.data.FullGuide.version.collectAsState()
+    var now by remember(c.key) { mutableStateOf<app.sideline.tv.data.EpgItem?>(null) }
+    var next by remember(c.key) { mutableStateOf<app.sideline.tv.data.EpgItem?>(null) }
+    LaunchedEffect(c.key, guideVersion) {
+        val items = SidelineApp.repo.epgCached(c)
+        val t = System.currentTimeMillis() / 1000
+        now = items.firstOrNull { t in it.start until it.end }
+        next = items.firstOrNull { it.start >= t }
+    }
+    FocusCard(onClick = onClick, onMenu = { ChannelMenu.open(c, inFavourites = true) },
+        modifier = Modifier.width(300.dp).height(132.dp)) { _ ->
+        androidx.compose.foundation.layout.Column(Modifier.fillMaxSize().padding(14.dp)) {
+            androidx.compose.foundation.layout.Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                coil.compose.AsyncImage(model = c.logo, contentDescription = null, modifier = Modifier.size(width = 52.dp, height = 30.dp))
+                androidx.compose.foundation.layout.Spacer(Modifier.width(10.dp))
+                Text(c.name, color = C.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+            }
+            val p = now
+            androidx.compose.foundation.layout.Spacer(Modifier.height(10.dp))
+            Text(p?.title ?: "No guide info", color = if (p != null) C.Text else C.Faint, fontSize = 14.sp, maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+            if (p != null) {
+                val frac = ((System.currentTimeMillis() / 1000 - p.start).toFloat() / (p.end - p.start).coerceAtLeast(1)).coerceIn(0f, 1f)
+                androidx.compose.foundation.layout.Box(Modifier.padding(top = 6.dp).fillMaxWidth().height(3.dp).background(C.Surface2)) {
+                    androidx.compose.foundation.layout.Box(Modifier.fillMaxWidth(frac).height(3.dp).background(C.Accent))
+                }
+                Text("Ends ${timeOf(p.end * 1000)}" + (next?.let { "  ·  Next: ${it.title}" } ?: ""), color = C.Faint, fontSize = 11.sp,
+                    maxLines = 1, modifier = Modifier.padding(top = 4.dp))
+            }
+        }
+    }
 }

@@ -75,6 +75,8 @@ fun SettingsScreen() {
     var manageCats by remember { mutableStateOf<String?>(null) }
     var editTmdb by remember { mutableStateOf(false) }
     var editOmdb by remember { mutableStateOf(false) }
+    var editGuideUrl by remember { mutableStateOf(false) }
+    var backupOpen by remember { mutableStateOf(false) }
     val omdbKey by prefs.omdbKey.collectAsState()
     val tmdbKey by prefs.tmdbKey.collectAsState()
     val hidden by prefs.hiddenCats.collectAsState()
@@ -170,10 +172,33 @@ fun SettingsScreen() {
                 SectionTitle("Show or hide categories")
                 Text("Hide categories you never watch. They also drop out of search and \"All\".", color = C.Muted, fontSize = 14.sp)
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 8.dp)) {
+                    val hiddenCh by prefs.hiddenChannels.collectAsState()
+                    Chip("Hidden channels (${hiddenCh.size})", false, onClick = { manageCats = "channels" })
                     listOf("live" to "Live TV", "vod" to "Movies", "series" to "Series").forEach { (k, label) ->
                         val n = hidden.count { it.startsWith("$k:") }
                         Chip(if (n > 0) "$label ($n hidden)" else label, false, onClick = { manageCats = k })
                     }
+                }
+            }
+        }
+
+        item {
+            Column {
+                SectionTitle("TV guide")
+                val src by prefs.guideSource.collectAsState()
+                val url by prefs.guideUrl.collectAsState()
+                val status by app.sideline.tv.data.FullGuide.status.collectAsState()
+                Text("The full guide covers about 2 days ahead and 12 hours back, and powers programme search. " +
+                    "It downloads in the background, at most every 12 hours.", color = C.Muted, fontSize = 14.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 8.dp)) {
+                    Chip("Provider's full guide", src == "full", onClick = { prefs.setGuideSource("full"); app.sideline.tv.data.FullGuide.load(force = true) })
+                    Chip("Custom guide address…", src == "custom", onClick = { editGuideUrl = true })
+                    Chip("Basic (now & next only)", src == "basic", onClick = { prefs.setGuideSource("basic"); app.sideline.tv.data.FullGuide.clear() })
+                }
+                if (src == "custom" && url.isNotBlank()) Text("Address: $url", color = C.Faint, fontSize = 12.sp, maxLines = 1, modifier = Modifier.padding(top = 4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 6.dp)) {
+                    Text(status, color = C.Faint, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                    if (src != "basic") Chip("⟳ Refresh guide", false, onClick = { app.sideline.tv.data.FullGuide.load(force = true) })
                 }
             }
         }
@@ -219,6 +244,16 @@ fun SettingsScreen() {
 
         item {
             Column {
+                SectionTitle("Backup & restore")
+                Text("Save everything you've set up (accounts, favourites, hidden and renamed channels, teams, reminders, progress, keys) " +
+                    "to your phone or computer, or restore it after a reset.", color = C.Muted, fontSize = 14.sp)
+                Spacer(Modifier.height(8.dp))
+                Chip("Open backup page", false, onClick = { backupOpen = true })
+            }
+        }
+
+        item {
+            Column {
                 SectionTitle("About")
                 val catchup = when {
                     channels.isEmpty() -> "Not checked yet (no channels loaded)"
@@ -236,12 +271,18 @@ fun SettingsScreen() {
     editing?.let { a -> AccountEditor(a, isNew = accounts.none { it.id == a.id }, onDone = { editing = null }) }
     teamsFor?.let { id -> TeamPicker(id) { teamsFor = null } }
     if (editOs) OpenSubtitlesEditor { editOs = false }
-    manageCats?.let { k -> CategoryManager(k) { manageCats = null } }
+    manageCats?.let { k -> if (k == "channels") HiddenChannels { manageCats = null } else CategoryManager(k) { manageCats = null } }
     if (editTmdb) KeyEditor(
         "TMDB (The Movie Database)",
         "Free key: sign up at themoviedb.org, then Settings → API → create a key (personal use). Paste either the API Key or the API Read Access Token.",
         "TMDB API key or Read Access Token", prefs.tmdbKey.value, { prefs.setTmdbKey(it) },
     ) { editTmdb = false }
+    if (backupOpen) BackupDialog { backupOpen = false }
+    if (editGuideUrl) KeyEditor(
+        "Custom TV guide (XMLTV)",
+        "Paste the address of an XMLTV guide (.xml or .xml.gz). Channels are matched by their guide id, so it must use the same ids as your provider. Catch-up from this guide may be off by the time-zone difference.",
+        "Guide address (http…)", prefs.guideUrl.value, { prefs.setGuideUrl(it); prefs.setGuideSource("custom"); app.sideline.tv.data.FullGuide.load(force = true) },
+    ) { editGuideUrl = false }
     if (editOmdb) KeyEditor(
         "OMDb (IMDb ratings)",
         "Free key: go to omdbapi.com → API Key → choose FREE, enter your email, and click the activation link they send. Then paste the key here.",
@@ -490,6 +531,62 @@ private fun KeyEditor(title: String, help: String, label: String, current: Strin
                     Chip("Save", true, onClick = { save(key); onDone() })
                     Chip("Cancel", false, onClick = onDone)
                 }
+            }
+        }
+    }
+}
+
+/** Channels hidden with Menu → Hide. Select one to show it again. */
+@Composable
+private fun HiddenChannels(onDone: () -> Unit) {
+    val prefs = SidelineApp.prefs
+    val hidden by prefs.hiddenChannels.collectAsState()
+    val list = remember(hidden) { SidelineApp.repo.hiddenChannelList() }
+    TvDialog(onDone) {
+        Box(Modifier.fillMaxSize().background(C.Bg.copy(alpha = 0.97f))) {
+            Column(Modifier.fillMaxSize().padding(start = 48.dp, end = 48.dp, top = 32.dp)) {
+                Text("Hidden channels", color = C.Text, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+                Text("Select a channel to show it again. Back when done.", color = C.Muted, fontSize = 14.sp, modifier = Modifier.padding(bottom = 10.dp))
+                if (list.isEmpty()) Text("No hidden channels.", color = C.Faint)
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(260.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp),
+                    contentPadding = PaddingValues(bottom = 60.dp),
+                ) {
+                    items(list, key = { it.key }) { c -> Chip("↺ ${c.name}", false, onClick = { prefs.toggleHiddenChannel(c.key) }) }
+                }
+            }
+        }
+    }
+}
+
+/** Shows the web address to open on a phone/computer; the little web server runs only while this is open. */
+@Composable
+private fun BackupDialog(onDone: () -> Unit) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val status by app.sideline.tv.data.Backup.status.collectAsState()
+    var address by remember { mutableStateOf<String?>(null) }
+    val close = remember { FocusRequester() }
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        address = app.sideline.tv.data.Backup.start(ctx)
+        onDispose { app.sideline.tv.data.Backup.stop() }
+    }
+    LaunchedEffect(Unit) { delay(200); try { close.requestFocus() } catch (_: Exception) {} }
+    TvDialog(onDone) {
+        Box(Modifier.fillMaxSize().background(C.Bg.copy(alpha = 0.97f)), contentAlignment = Alignment.Center) {
+            Column(Modifier.width(760.dp).clip(RoundedCornerShape(18.dp)).background(C.Surface).padding(32.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Backup & restore", color = C.Text, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                val a = address
+                if (a == null) {
+                    Text(status.ifBlank { "Couldn't start the backup page." }, color = C.Live, fontSize = 15.sp)
+                } else {
+                    Text("On a phone or computer connected to the same Wi-Fi, open this address in the web browser:", color = C.Muted, fontSize = 15.sp)
+                    Text(a, color = C.Accent, fontSize = 30.sp, fontWeight = FontWeight.Bold)
+                    Text("There you can download a backup file, or upload one to restore (which restarts Cooper TV). " +
+                        "The page only works while this screen is open.", color = C.Muted, fontSize = 14.sp)
+                    if (status.isNotBlank()) Text(status, color = C.Gold, fontSize = 15.sp)
+                }
+                Chip("Done", true, onClick = onDone, modifier = Modifier.focusRequester(close))
             }
         }
     }

@@ -4,6 +4,7 @@ import android.content.Context
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 
 /** Everything the user chooses, stored on the stick. Exposed as StateFlows so screens update live. */
@@ -43,6 +44,46 @@ class Prefs(context: Context) {
         sp.edit().putString("watchedSeries", l.joinToString(",")).apply()
     }
 
+    // ---- Channel edits ----
+    /** Called after a rename/hide so the channel list can refresh. */
+    var onChannelEdit: (() -> Unit)? = null
+
+    private val _hiddenChannels = MutableStateFlow(sp.getStringSet("hiddenChannels", emptySet())!!.toSet())
+    val hiddenChannels: StateFlow<Set<String>> = _hiddenChannels
+    fun toggleHiddenChannel(key: String) { toggle(_hiddenChannels, "hiddenChannels", key); onChannelEdit?.invoke() }
+
+    private val _channelNames = MutableStateFlow(loadMap("channelNames"))
+    val channelNames: StateFlow<Map<String, String>> = _channelNames
+    fun renameChannel(key: String, name: String?) {
+        val m = _channelNames.value.toMutableMap()
+        if (name.isNullOrBlank()) m.remove(key) else m[key] = name.trim()
+        _channelNames.value = m
+        sp.edit().putString("channelNames", json.encodeToString(kotlinx.serialization.builtins.MapSerializer(
+            String.serializer(), String.serializer()), m)).apply()
+        onChannelEdit?.invoke()
+    }
+    private fun loadMap(key: String): Map<String, String> = try {
+        sp.getString(key, null)?.let {
+            json.decodeFromString(kotlinx.serialization.builtins.MapSerializer(
+                String.serializer(), String.serializer()), it)
+        } ?: emptyMap()
+    } catch (e: Exception) { emptyMap() }
+
+    /** Your order for favourite channels (keys); favourites not listed go at the end. */
+    private val _favOrder = MutableStateFlow(sp.getString("favOrder", "")!!.split(",").filter { it.isNotBlank() })
+    val favOrder: StateFlow<List<String>> = _favOrder
+    private fun saveFavOrder(l: List<String>) { _favOrder.value = l; sp.edit().putString("favOrder", l.joinToString(",")).apply() }
+    /** Move a favourite up (-1), down (+1), or to the top (Int.MIN_VALUE). */
+    fun moveFavourite(key: String, delta: Int) {
+        val order = (_favOrder.value.filter { it in _favChannels.value } + _favChannels.value.filter { it !in _favOrder.value }).toMutableList()
+        val i = order.indexOf(key)
+        if (i < 0) return
+        order.removeAt(i)
+        val j = if (delta == Int.MIN_VALUE) 0 else (i + delta).coerceIn(0, order.size)
+        order.add(j, key)
+        saveFavOrder(order)
+    }
+
     /** Hidden categories: "live:acc:cat", "vod:acc:cat", "series:acc:cat". */
     private val _hiddenCats = MutableStateFlow(sp.getStringSet("hiddenCats", emptySet())!!.toSet())
     val hiddenCats: StateFlow<Set<String>> = _hiddenCats
@@ -79,6 +120,14 @@ class Prefs(context: Context) {
     val osUser: StateFlow<String> = _osUser
     private val _osPass = str("osPass", "")
     val osPass: StateFlow<String> = _osPass
+
+    /** TV guide: "full" (provider's xmltv.php), "basic" (provider's now & next), or "custom" (guideUrl). */
+    private val _guideSource = str("guideSource", "full")
+    val guideSource: StateFlow<String> = _guideSource
+    private val _guideUrl = str("guideUrl", "")
+    val guideUrl: StateFlow<String> = _guideUrl
+    fun setGuideSource(v: String) { _guideSource.value = v; sp.edit().putString("guideSource", v).apply() }
+    fun setGuideUrl(v: String) { _guideUrl.value = v.trim(); sp.edit().putString("guideUrl", v.trim()).apply() }
 
     private val _omdbKey = str("omdbKey", "")
     val omdbKey: StateFlow<String> = _omdbKey
@@ -127,7 +176,17 @@ class Prefs(context: Context) {
     fun toggleTeam(leagueId: String, teamId: String) = toggle(_favTeams, "favTeams", "$leagueId|$teamId")
     fun toggleFollow(eventId: String) = toggle(_followed, "followed", eventId)
     fun togglePin(eventId: String) = toggle(_pinned, "pinned", eventId)
-    fun toggleFavChannel(key: String) = toggle(_favChannels, "favChannels", key)
+    fun toggleFavChannel(key: String) {
+        toggle(_favChannels, "favChannels", key)
+        if (key in _favChannels.value) saveFavOrder(_favOrder.value.filter { it != key } + key)
+        else saveFavOrder(_favOrder.value.filter { it != key })
+    }
+
+    /** Favourite channel keys in your chosen order. */
+    fun orderedFavs(): List<String> {
+        val favs = _favChannels.value
+        return _favOrder.value.filter { it in favs } + favs.filter { it !in _favOrder.value }.sorted()
+    }
 
     fun setAutoFollowTeams(v: Boolean) { _autoFollowTeams.value = v; sp.edit().putBoolean("autoFollowTeams", v).apply() }
     fun setSpoilerFree(v: Boolean) { _spoilerFree.value = v; sp.edit().putBoolean("spoilerFree", v).apply() }

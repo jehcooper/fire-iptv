@@ -103,27 +103,7 @@ fun ProgramGuide(channels: List<Channel>) {
                     items(channels, key = { it.key }) { c ->
                         GuideRow(c, windowStart, windowLen, chanW, gridW, perSec, tick,
                             onFocus = { focused = c to it },
-                            onPick = { item ->
-                                val now = System.currentTimeMillis() / 1000
-                                when {
-                                    item == null || now in item.start until item.end -> Play.channel(ctx, c, channels)
-                                    item.end <= now && c.hasArchive -> Play.catchUp(ctx, c, item)
-                                    item.end <= now -> Play.channel(ctx, c, channels)
-                                    else -> {
-                                        // Starts later: offer (or cancel) a reminder.
-                                        val r = app.sideline.tv.data.Reminder(c.key, c.name, item.title, item.start)
-                                        if (SidelineApp.reminders.has(c.key, item.start)) {
-                                            Confirm.ask("Cancel the reminder for \"${item.title}\"?", yes = "Cancel reminder", destructive = true) {
-                                                SidelineApp.reminders.remove(r)
-                                            }
-                                        } else {
-                                            Confirm.ask("Remind me when \"${item.title}\" starts?",
-                                                "${c.name} · ${dayTimeOf(item.start * 1000)}. A pop-up will offer to switch to it (while Cooper TV is open).",
-                                                yes = "🔔 Remind me") { SidelineApp.reminders.add(r) }
-                                        }
-                                    }
-                                }
-                            })
+                            onPick = { item -> pickProgramme(ctx, c, item, channels) })
                     }
                 }
             }
@@ -144,7 +124,8 @@ private fun GuideRow(
     var items by remember(c.key) { mutableStateOf<List<EpgItem>?>(null) }
     val allReminders by SidelineApp.reminders.list.collectAsState()
     val reminderStarts = remember(allReminders, c.key) { allReminders.filter { it.channelKey == c.key }.map { it.start }.toSet() }
-    LaunchedEffect(c.key) { items = SidelineApp.repo.epgCached(c) }
+    val guideVersion by app.sideline.tv.data.FullGuide.version.collectAsState()
+    LaunchedEffect(c.key, guideVersion) { items = SidelineApp.repo.epgCached(c) }
     val windowEnd = windowStart + windowLen
     val slots = remember(items, windowStart) {
         val list = (items ?: emptyList()).filter { it.end > windowStart && it.start < windowEnd && it.end > it.start }.sortedBy { it.start }
@@ -196,6 +177,31 @@ private fun GuideRow(
                     }
                 }
                 Spacer(Modifier.width(3.dp))
+            }
+        }
+    }
+}
+
+/**
+ * What OK does on a programme (guide grid or programme search): on now → watch; earlier → catch-up
+ * (if the channel has it); later → set or cancel a reminder.
+ */
+fun pickProgramme(ctx: android.content.Context, c: Channel, item: EpgItem?, queue: List<Channel>) {
+    val now = System.currentTimeMillis() / 1000
+    when {
+        item == null || now in item.start until item.end -> Play.channel(ctx, c, queue)
+        item.end <= now && c.hasArchive -> Play.catchUp(ctx, c, item)
+        item.end <= now -> Play.channel(ctx, c, queue)
+        else -> {
+            val r = app.sideline.tv.data.Reminder(c.key, c.name, item.title, item.start)
+            if (SidelineApp.reminders.has(c.key, item.start)) {
+                Confirm.ask("Cancel the reminder for \"${item.title}\"?", yes = "Cancel reminder", destructive = true) {
+                    SidelineApp.reminders.remove(r)
+                }
+            } else {
+                Confirm.ask("Remind me when \"${item.title}\" starts?",
+                    "${c.name} · ${dayTimeOf(item.start * 1000)}. A pop-up will offer to switch to it (while Cooper TV is open).",
+                    yes = "🔔 Remind me") { SidelineApp.reminders.add(r) }
             }
         }
     }

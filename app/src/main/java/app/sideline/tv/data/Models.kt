@@ -40,8 +40,11 @@ data class Channel(
     val epgId: String?,
     val hasArchive: Boolean,
     val archiveDays: Int,
+    /** The provider's own name, kept when you rename a channel (used for matching games and backups). */
+    val origName: String = "",
 ) {
     val key: String get() = "$accountId:$streamId"
+    val baseName: String get() = origName.ifBlank { name }
 }
 
 data class Movie(

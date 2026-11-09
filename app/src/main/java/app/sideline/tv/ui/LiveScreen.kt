@@ -111,11 +111,22 @@ fun LiveScreen() {
     if (selected.isEmpty()) selected = cats.firstOrNull()?.let { "${it.accountId}:${it.id}" } ?: FAV
 
     // Channel list for the selection, worked out off the main thread (search waits for you to stop typing).
-    val list by produceState(initialValue = emptyList<Channel>(), selected, query, channels, favs, recent, hidden) {
+    val favOrder by prefs.favOrder.collectAsState()
+    var searchProgrammes by rememberSaveable { mutableStateOf(false) }
+    val guideVersion by app.sideline.tv.data.FullGuide.version.collectAsState()
+    // Programme search over the full TV guide: (channel, programme) pairs.
+    val progResults by produceState(initialValue = emptyList<Pair<Channel, EpgItem>>(), query, guideVersion, channels) {
+        value = withContext(Dispatchers.Default) {
+            app.sideline.tv.data.FullGuide.search(query).mapNotNull { (epg, item) ->
+                repo.channelsForEpg(epg).firstOrNull()?.let { it to item }
+            }
+        }
+    }
+    val list by produceState(initialValue = emptyList<Channel>(), selected, query, channels, favs, recent, hidden, favOrder) {
         if (selected == SEARCH) delay(250)
         value = withContext(Dispatchers.Default) {
             when (selected) {
-                FAV -> channels.filter { it.key in favs }
+                FAV -> prefs.orderedFavs().mapNotNull { repo.channel(it) }
                 RECENT -> recent.mapNotNull { repo.channel(it) }
                 SEARCH -> if (query.length < 2) emptyList() else channels.asSequence()
                     .filter { "live:${it.accountId}:${it.categoryId}" !in hidden && it.name.contains(query, ignoreCase = true) }
@@ -154,7 +165,7 @@ fun LiveScreen() {
         return
     }
 
-    if (searching) SearchDialog(query, "Search channels", onSearch = { query = it; selected = SEARCH; searching = false }, onDismiss = { searching = false })
+    if (searching) SearchDialog(query, "Search channels and programmes", onSearch = { query = it; selected = SEARCH; searching = false }, onDismiss = { searching = false })
 
     Row(Modifier.fillMaxSize().padding(start = 48.dp, end = 48.dp, top = 8.dp)) {
         LazyColumn(Modifier.width(300.dp), verticalArrangement = Arrangement.spacedBy(4.dp), contentPadding = PaddingValues(bottom = 60.dp)) {
@@ -190,7 +201,7 @@ fun LiveScreen() {
             Column(Modifier.fillMaxWidth().height(120.dp).clip(RoundedCornerShape(14.dp)).background(C.Surface).padding(18.dp)) {
                 val c = focusedCh
                 if (c == null) {
-                    Text("Select a channel to watch. Menu (≡) adds or removes a favourite.", color = C.Muted, fontSize = 15.sp)
+                    Text("Select a channel to watch. Menu (≡) on a channel: favourite, rename, reorder or hide.", color = C.Muted, fontSize = 15.sp)
                 } else {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(c.name, color = C.Text, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, modifier = Modifier.weight(1f))
@@ -206,8 +217,25 @@ fun LiveScreen() {
             }
             Spacer(Modifier.height(14.dp))
             if (selected == SEARCH) {
-                SearchButton(query, "Search channels", onClick = { searching = true }, modifier = Modifier.focusRequester(searchBar))
+                SearchButton(query, "Search channels and TV programmes", onClick = { searching = true }, modifier = Modifier.focusRequester(searchBar))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
+                    Chip("Channels (${list.size})", !searchProgrammes, onClick = { searchProgrammes = false })
+                    Chip(if (app.sideline.tv.data.FullGuide.loaded) "Programmes (${progResults.size})" else "Programmes (needs full guide)",
+                        searchProgrammes, onClick = { searchProgrammes = true })
+                }
                 Spacer(Modifier.height(10.dp))
+            }
+            if (selected == SEARCH && searchProgrammes) {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp), contentPadding = PaddingValues(bottom = 60.dp, top = 4.dp, start = 8.dp, end = 8.dp)) {
+                    if (progResults.isEmpty()) item {
+                        Text(if (app.sideline.tv.data.FullGuide.loaded) "No programmes match." else
+                            "Programme search uses the full TV guide (Settings → TV guide).", color = C.Muted, modifier = Modifier.padding(16.dp))
+                    }
+                    items(progResults, key = { "${it.first.key}@${it.second.start}" }) { (c, item) ->
+                        ProgrammeRow(c, item, onClick = { pickProgramme(ctx, c, item, listOf(c)) })
+                    }
+                }
+                return@Column
             }
             if (list.isEmpty()) {
                 Text(
@@ -220,13 +248,7 @@ fun LiveScreen() {
                     FocusCard(
                         onClick = { Play.channel(ctx, c, list) },
                         onFocus = { focusedCh = c },
-                        onMenu = {
-                            val isFav = c.key in favs
-                            Confirm.ask(
-                                if (isFav) "Remove ${c.name} from favourites?" else "Add ${c.name} to favourites?",
-                                yes = if (isFav) "Remove" else "Add", destructive = isFav,
-                            ) { prefs.toggleFavChannel(c.key) }
-                        },
+                        onMenu = { ChannelMenu.open(c, inFavourites = selected == FAV) },
                         modifier = Modifier.fillMaxWidth(), scaleOnFocus = 1.02f, shape = RoundedCornerShape(10.dp),
                     ) { _ ->
                         Row(Modifier.padding(horizontal = 14.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -240,6 +262,28 @@ fun LiveScreen() {
                     }
                 }
             }
+        }
+    }
+}
+
+/** A programme search result: title, channel, time, and what OK will do. */
+@Composable
+fun ProgrammeRow(c: Channel, item: EpgItem, onClick: () -> Unit) {
+    val now = System.currentTimeMillis() / 1000
+    val (tag, color) = when {
+        now in item.start until item.end -> "ON NOW" to C.Live
+        item.end <= now && c.hasArchive -> "CATCH-UP" to C.Gold
+        item.end <= now -> "ENDED" to C.Faint
+        SidelineApp.reminders.has(c.key, item.start) -> "🔔 SET" to C.Accent
+        else -> "UPCOMING" to C.Surface2
+    }
+    FocusCard(onClick = onClick, modifier = Modifier.fillMaxWidth(), scaleOnFocus = 1.02f, shape = RoundedCornerShape(10.dp)) { _ ->
+        Row(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(item.title, color = C.Text, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text("${c.name} · ${dayTimeOf(item.start * 1000)} – ${timeOf(item.end * 1000)}", color = C.Muted, fontSize = 13.sp, maxLines = 1)
+            }
+            Pill(tag, color, if (color == C.Surface2 || color == C.Faint) C.Text else C.Bg)
         }
     }
 }

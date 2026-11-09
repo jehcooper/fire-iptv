@@ -42,6 +42,8 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         SidelineApp.scores.refreshNow()
+        // Re-reads the full TV guide only if it's more than 12 hours old.
+        if (SidelineApp.repo.channels.value.isNotEmpty()) app.sideline.tv.data.FullGuide.load()
     }
 }
 
@@ -86,6 +88,7 @@ private fun Root() {
         }
         ScorePopupHost()
         ReminderHost()
+        ChannelMenuHost()
         ConfirmHost()
     }
 }

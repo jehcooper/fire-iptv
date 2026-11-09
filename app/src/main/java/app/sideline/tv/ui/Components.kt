@@ -342,7 +342,10 @@ fun SearchButton(query: String, hint: String, onClick: () -> Unit, modifier: Mod
  * closes it and shows results. Keeping the text box out of the page stops it trapping the remote's focus.
  */
 @Composable
-fun SearchDialog(initial: String, title: String, onSearch: (String) -> Unit, onDismiss: () -> Unit) {
+fun SearchDialog(
+    initial: String, title: String, onSearch: (String) -> Unit, onDismiss: () -> Unit,
+    placeholder: String = "Type at least 2 letters", actionLabel: String = "Search",
+) {
     var text by remember { mutableStateOf(androidx.compose.ui.text.input.TextFieldValue(initial, androidx.compose.ui.text.TextRange(initial.length))) }
     val field = remember { FocusRequester() }
     val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
@@ -358,7 +361,7 @@ fun SearchDialog(initial: String, title: String, onSearch: (String) -> Unit, onD
                 Spacer(Modifier.height(12.dp))
                 androidx.compose.material3.OutlinedTextField(
                     value = text, onValueChange = { text = it }, singleLine = true,
-                    placeholder = { Text("Type at least 2 letters", color = C.Faint) },
+                    placeholder = { Text(placeholder, color = C.Faint) },
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Search),
                     keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSearch = { done() }, onDone = { done() }),
                     colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
@@ -369,7 +372,7 @@ fun SearchDialog(initial: String, title: String, onSearch: (String) -> Unit, onD
                 )
                 Spacer(Modifier.height(16.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Chip("Search", true, onClick = { done() })
+                    Chip(actionLabel, true, onClick = { done() })
                     Chip("Clear", false, onClick = { text = androidx.compose.ui.text.input.TextFieldValue("") })
                     Chip("Cancel", false, onClick = onDismiss)
                 }
