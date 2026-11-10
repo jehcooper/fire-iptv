@@ -53,18 +53,6 @@ private const val FAV = "__fav"
 private const val RECENT = "__recent"
 private const val SEARCH = "__search"
 
-@Composable
-fun SearchBox(value: String, onChange: (String) -> Unit, hint: String, modifier: Modifier = Modifier) {
-    OutlinedTextField(
-        value = value, onValueChange = onChange, singleLine = true,
-        placeholder = { Text(hint, color = C.Faint) },
-        colors = OutlinedTextFieldDefaults.colors(
-            focusedBorderColor = C.Accent, unfocusedBorderColor = C.Surface2,
-            focusedTextColor = C.Text, unfocusedTextColor = C.Text, cursorColor = C.Accent,
-        ),
-        modifier = modifier.fillMaxWidth(),
-    )
-}
 
 @Composable
 fun CategoryItem(

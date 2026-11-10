@@ -129,6 +129,15 @@ class Prefs(context: Context) {
     fun setGuideSource(v: String) { _guideSource.value = v; sp.edit().putString("guideSource", v).apply() }
     fun setGuideUrl(v: String) { _guideUrl.value = v.trim(); sp.edit().putString("guideUrl", v.trim()).apply() }
 
+    /** How see-through the player's side panels are, 0–100 % in steps of 5 (0 = solid). */
+    private val _panelTransparency = MutableStateFlow(sp.getInt("panelTransparency", 30))
+    val panelTransparency: StateFlow<Int> = _panelTransparency
+    fun setPanelTransparency(v: Int) {
+        val c = (v / 5 * 5).coerceIn(0, 100)
+        _panelTransparency.value = c
+        sp.edit().putInt("panelTransparency", c).apply()
+    }
+
     private val _omdbKey = str("omdbKey", "")
     val omdbKey: StateFlow<String> = _omdbKey
     fun setOmdbKey(v: String) { _omdbKey.value = v.trim(); sp.edit().putString("omdbKey", v.trim()).apply() }

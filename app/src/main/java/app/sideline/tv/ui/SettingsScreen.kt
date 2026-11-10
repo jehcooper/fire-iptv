@@ -1,6 +1,7 @@
 package app.sideline.tv.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,6 +35,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -77,6 +79,7 @@ fun SettingsScreen() {
     var editOmdb by remember { mutableStateOf(false) }
     var editGuideUrl by remember { mutableStateOf(false) }
     var backupOpen by remember { mutableStateOf(false) }
+    var speedTest by remember { mutableStateOf(false) }
     val omdbKey by prefs.omdbKey.collectAsState()
     val tmdbKey by prefs.tmdbKey.collectAsState()
     val hidden by prefs.hiddenCats.collectAsState()
@@ -244,6 +247,38 @@ fun SettingsScreen() {
 
         item {
             Column {
+                SectionTitle("Speed test")
+                Text("Checks your Wi-Fi, how quickly the internet and your provider respond, your download headroom, and how a live " +
+                    "channel behaves, then suggests fixes. Takes about 30 seconds and briefly uses your live connection.", color = C.Muted, fontSize = 14.sp)
+                Spacer(Modifier.height(8.dp))
+                Chip("▶ Run speed test", false, onClick = { speedTest = true })
+            }
+        }
+
+        item {
+            Column {
+                SectionTitle("Player panels")
+                val t by prefs.panelTransparency.collectAsState()
+                Text("How see-through the channel list, games and subtitle panels are while something plays.", color = C.Muted, fontSize = 14.sp)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(top = 8.dp)) {
+                    Chip("− 5%", false, onClick = { prefs.setPanelTransparency(t - 5) })
+                    // Preview swatch: the panel colour at this level over a stand-in "picture".
+                    Box(Modifier.width(150.dp).height(40.dp).clip(RoundedCornerShape(8.dp))
+                        .background(androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(Color(0xFFE85D3A), Color(0xFF3A8EE8), Color(0xFF3AE87A))))) {
+                        Box(Modifier.fillMaxSize().background(C.Bg.copy(alpha = (100 - t) / 100f)), contentAlignment = Alignment.Center) {
+                            Text("$t% see-through", color = C.Text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                    Chip("+ 5%", false, onClick = { prefs.setPanelTransparency(t + 5) })
+                    Chip("Default (30%)", t == 30, onClick = { prefs.setPanelTransparency(30) })
+                }
+                Text("0% = solid · 100% = fully see-through (text can be hard to read over a busy picture).", color = C.Faint, fontSize = 12.sp,
+                    modifier = Modifier.padding(top = 4.dp))
+            }
+        }
+
+        item {
+            Column {
                 SectionTitle("Backup & restore")
                 Text("Save everything you've set up (accounts, favourites, hidden and renamed channels, teams, reminders, progress, keys) " +
                     "to your phone or computer, or restore it after a reset.", color = C.Muted, fontSize = 14.sp)
@@ -278,6 +313,7 @@ fun SettingsScreen() {
         "TMDB API key or Read Access Token", prefs.tmdbKey.value, { prefs.setTmdbKey(it) },
     ) { editTmdb = false }
     if (backupOpen) BackupDialog { backupOpen = false }
+    if (speedTest) SpeedTestDialog { speedTest = false }
     if (editGuideUrl) KeyEditor(
         "Custom TV guide (XMLTV)",
         "Paste the address of an XMLTV guide (.xml or .xml.gz). Channels are matched by their guide id, so it must use the same ids as your provider. Catch-up from this guide may be off by the time-zone difference.",
@@ -290,18 +326,33 @@ fun SettingsScreen() {
     ) { editOmdb = false }
 }
 
+/**
+ * A setting you type into. Moving onto it never opens the keyboard: it's a button showing the current value,
+ * and OK opens a small window with the keyboard.
+ */
 @Composable
 private fun Field(label: String, value: String, onChange: (String) -> Unit, secret: Boolean = false, modifier: Modifier = Modifier) {
-    OutlinedTextField(
-        value = value, onValueChange = onChange, singleLine = true,
-        label = { Text(label) },
-        visualTransformation = if (secret) PasswordVisualTransformation() else VisualTransformation.None,
-        colors = OutlinedTextFieldDefaults.colors(
-            focusedBorderColor = C.Accent, unfocusedBorderColor = C.Surface2,
-            focusedTextColor = C.Text, unfocusedTextColor = C.Text, cursorColor = C.Accent,
-            focusedLabelColor = C.Accent, unfocusedLabelColor = C.Muted,
-        ),
-        modifier = modifier.fillMaxWidth(),
+    var editing by remember { mutableStateOf(false) }
+    FocusCard(onClick = { editing = true }, modifier = modifier.fillMaxWidth(), scaleOnFocus = 1.01f, shape = RoundedCornerShape(10.dp)) { f ->
+        Column(
+            Modifier.fillMaxWidth().border(1.5.dp, if (f) C.Accent else C.Surface2, RoundedCornerShape(10.dp))
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+        ) {
+            Text(label, color = if (f) C.Accent else C.Muted, fontSize = 12.sp)
+            Text(
+                when {
+                    value.isBlank() -> "Not set · press OK to type"
+                    secret -> "•".repeat(value.length.coerceAtMost(16))
+                    else -> value
+                },
+                color = if (value.isBlank()) C.Faint else C.Text, fontSize = 16.sp, maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            )
+        }
+    }
+    if (editing) SearchDialog(
+        initial = value, title = label, placeholder = label, actionLabel = "Done", secret = secret,
+        onSearch = { onChange(it); editing = false }, onDismiss = { editing = false },
     )
 }
 
@@ -587,6 +638,59 @@ private fun BackupDialog(onDone: () -> Unit) {
                     if (status.isNotBlank()) Text(status, color = C.Gold, fontSize = 15.sp)
                 }
                 Chip("Done", true, onClick = onDone, modifier = Modifier.focusRequester(close))
+            }
+        }
+    }
+}
+
+@Composable
+private fun SpeedTestDialog(onDone: () -> Unit) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val progress by app.sideline.tv.data.SpeedTest.progress.collectAsState()
+    var result by remember { mutableStateOf<app.sideline.tv.data.SpeedTest.Result?>(null) }
+    val close = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        // Test the channel you watch most: most recent, else first favourite, else any.
+        val repo = SidelineApp.repo
+        val ch = SidelineApp.prefs.recentChannels.value.firstNotNullOfOrNull { repo.channel(it) }
+            ?: SidelineApp.prefs.orderedFavs().firstNotNullOfOrNull { repo.channel(it) }
+        result = app.sideline.tv.data.SpeedTest.run(ctx, ch)
+    }
+    LaunchedEffect(Unit) { delay(200); try { close.requestFocus() } catch (_: Exception) {} }
+    TvDialog(onDone) {
+        Box(Modifier.fillMaxSize().background(C.Bg.copy(alpha = 0.97f)), contentAlignment = Alignment.Center) {
+            Column(Modifier.width(820.dp).clip(RoundedCornerShape(18.dp)).background(C.Surface).padding(28.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Speed test", color = C.Text, fontSize = 24.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                    Chip(if (result == null) "Cancel" else "Done", result != null, onClick = onDone, modifier = Modifier.focusRequester(close))
+                }
+                val r = result
+                if (r == null) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 16.dp)) {
+                        androidx.compose.material3.CircularProgressIndicator(color = C.Accent, strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.width(12.dp))
+                        Text(progress.ifBlank { "Starting…" }, color = C.Muted, fontSize = 15.sp)
+                    }
+                } else {
+                    LazyColumn(Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        items(r.lines) { l ->
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                val (dot, col) = when (l.grade) {
+                                    app.sideline.tv.data.SpeedTest.Grade.GOOD -> "●" to C.Accent
+                                    app.sideline.tv.data.SpeedTest.Grade.OK -> "●" to C.Gold
+                                    app.sideline.tv.data.SpeedTest.Grade.POOR -> "●" to C.Live
+                                    app.sideline.tv.data.SpeedTest.Grade.INFO -> "○" to C.Muted
+                                }
+                                Text(dot, color = col, fontSize = 16.sp, modifier = Modifier.width(24.dp))
+                                Text(l.title, color = C.Muted, fontSize = 15.sp, modifier = Modifier.width(230.dp))
+                                Text(l.value, color = C.Text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(170.dp))
+                                Text(l.note, color = C.Faint, fontSize = 13.sp, maxLines = 1)
+                            }
+                        }
+                        item { Text("What to do", color = C.Accent, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 14.dp)) }
+                        items(r.advice) { a -> Text("• $a", color = C.Text, fontSize = 14.sp) }
+                    }
+                }
             }
         }
     }

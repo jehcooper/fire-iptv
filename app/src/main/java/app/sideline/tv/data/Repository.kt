@@ -83,12 +83,31 @@ class Repository(private val prefs: Prefs) {
         return rawChannels.filter { it.key in hidden }
     }
 
+    /** One line of the loading checklist shown while the app downloads your lists. */
+    data class LoadStep(val id: String, val label: String, val state: String = "waiting", val detail: String = "") {
+        val done get() = state == "done" || state == "failed"
+    }
+
+    private val _steps = MutableStateFlow<List<LoadStep>>(emptyList())
+    /** What the app is doing right now, step by step (empty when idle). */
+    val steps: StateFlow<List<LoadStep>> = _steps
+
+    private fun step(id: String, state: String, detail: String = "") {
+        _steps.value = _steps.value.map { if (it.id == id) it.copy(state = state, detail = detail) else it }
+    }
+
+    /** True when there's nothing to browse yet (first start, or no saved copy). */
+    val nothingLoaded: Boolean get() = channels.value.isEmpty() && movies.value.isEmpty() && series.value.isEmpty()
+
     fun refresh() {
         if (_loading.value) return
+        _loading.value = true
         scope.launch {
-            _loading.value = true
             // Saved copy first (instant), then the provider's latest.
-            if (channels.value.isEmpty() && movies.value.isEmpty()) load(fromCache = true)
+            if (nothingLoaded) {
+                _steps.value = listOf(LoadStep("cache", "Opening your saved channel and movie lists", "working"))
+                load(fromCache = true)
+            }
             load(fromCache = false)
             FullGuide.load()
         }
@@ -98,26 +117,56 @@ class Repository(private val prefs: Prefs) {
         _loading.value = true
         val errs = java.util.Collections.synchronizedList(mutableListOf<String>())
         val accounts = prefs.accounts.value
+        val n = java.text.NumberFormat.getIntegerInstance()
+        if (!fromCache) {
+            _steps.value = accounts.flatMap { a ->
+                listOfNotNull(
+                    if (a.useLive) LoadStep("live:${a.id}", "Live channels · ${a.name}") else null,
+                    if (a.useVod) LoadStep("vod:${a.id}", "Movies · ${a.name}") else null,
+                    if (a.useVod) LoadStep("series:${a.id}", "Series · ${a.name}") else null,
+                )
+            }
+        }
         coroutineScope {
             val live = accounts.filter { it.useLive }.map { a ->
                 async {
+                    if (!fromCache) step("live:${a.id}", "working", "downloading…")
                     try {
                         val c = client(a.id)!!
-                        c.liveCategories(fromCache) to c.liveStreams(fromCache)
+                        val r = c.liveCategories(fromCache) to c.liveStreams(fromCache)
+                        if (!fromCache) step("live:${a.id}", "done", "${n.format(r.second.size)} channels")
+                        r
                     } catch (e: Exception) {
-                        if (!fromCache) errs += "${a.name} (live): ${e.message}"
+                        if (!fromCache) { errs += "${a.name} (live): ${e.message}"; step("live:${a.id}", "failed", e.message ?: "failed") }
                         emptyList<Category>() to emptyList<Channel>()
                     }
                 }
             }
             val vod = accounts.filter { it.useVod }.map { a ->
                 async {
+                    if (!fromCache) step("vod:${a.id}", "working", "downloading…")
                     try {
                         val c = client(a.id)!!
-                        Triple(c.vodCategories(fromCache), c.vodStreams(fromCache), c.seriesCategories(fromCache) to c.series(fromCache))
+                        val r = c.vodCategories(fromCache) to c.vodStreams(fromCache)
+                        if (!fromCache) step("vod:${a.id}", "done", "${n.format(r.second.size)} movies")
+                        r
                     } catch (e: Exception) {
-                        if (!fromCache) errs += "${a.name} (on-demand): ${e.message}"
-                        Triple(emptyList<Category>(), emptyList<Movie>(), emptyList<Category>() to emptyList<Series>())
+                        if (!fromCache) { errs += "${a.name} (movies): ${e.message}"; step("vod:${a.id}", "failed", e.message ?: "failed") }
+                        emptyList<Category>() to emptyList<Movie>()
+                    }
+                }
+            }
+            val ser = accounts.filter { it.useVod }.map { a ->
+                async {
+                    if (!fromCache) step("series:${a.id}", "working", "downloading…")
+                    try {
+                        val c = client(a.id)!!
+                        val r = c.seriesCategories(fromCache) to c.series(fromCache)
+                        if (!fromCache) step("series:${a.id}", "done", "${n.format(r.second.size)} series")
+                        r
+                    } catch (e: Exception) {
+                        if (!fromCache) { errs += "${a.name} (series): ${e.message}"; step("series:${a.id}", "failed", e.message ?: "failed") }
+                        emptyList<Category>() to emptyList<Series>()
                     }
                 }
             }
@@ -129,20 +178,23 @@ class Repository(private val prefs: Prefs) {
                 rawChannels = newChannels
                 applyEdits()
             }
-
             val vodRes = vod.awaitAll()
             val newMovies = vodRes.flatMap { it.second }
-            val newSeries = vodRes.flatMap { it.third.second }
-            if (newMovies.isNotEmpty() || newSeries.isNotEmpty() || (!fromCache && errs.isEmpty())) {
+            if (newMovies.isNotEmpty() || (!fromCache && errs.isEmpty())) {
                 vodCategories.value = vodRes.flatMap { it.first }
                 movies.value = newMovies
-                seriesCategories.value = vodRes.flatMap { it.third.first }
+            }
+            val serRes = ser.awaitAll()
+            val newSeries = serRes.flatMap { it.second }
+            if (newSeries.isNotEmpty() || (!fromCache && errs.isEmpty())) {
+                seriesCategories.value = serRes.flatMap { it.first }
                 series.value = newSeries
             }
         }
         if (!fromCache) {
             _errors.value = errs.toList()
             _loading.value = false
+            _steps.value = emptyList()
         }
     }
 

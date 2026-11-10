@@ -113,14 +113,14 @@ fun Pill(text: String, color: Color, textColor: Color = C.Bg) {
 }
 
 @Composable
-fun Chip(text: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun Chip(text: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, compact: Boolean = false) {
     FocusCard(onClick = onClick, modifier = modifier, shape = RoundedCornerShape(50), scaleOnFocus = 1.08f) { f ->
         Box(
             Modifier
                 .background(if (selected) C.Accent.copy(alpha = if (f) 1f else 0.85f) else Color.Transparent)
-                .padding(horizontal = 18.dp, vertical = 8.dp),
+                .padding(horizontal = if (compact) 13.dp else 18.dp, vertical = if (compact) 7.dp else 8.dp),
         ) {
-            Text(text, color = if (selected) C.Bg else C.Text, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+            Text(text, color = if (selected) C.Bg else C.Text, fontSize = if (compact) 14.sp else 15.sp, fontWeight = FontWeight.Medium, maxLines = 1)
         }
     }
 }
@@ -276,11 +276,20 @@ fun SidePanel(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
  * (Drawing panels on top of a screen let focus leak to the screen underneath.)
  */
 @Composable
-fun TvDialog(onDismiss: () -> Unit, content: @Composable () -> Unit) {
+fun TvDialog(onDismiss: () -> Unit, dim: Boolean = true, content: @Composable () -> Unit) {
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
-    ) { content() }
+    ) {
+        if (!dim) {
+            // Panels over video: don't darken the picture behind (the panel sets its own see-through level).
+            val view = androidx.compose.ui.platform.LocalView.current
+            val window = ((view as? androidx.compose.ui.window.DialogWindowProvider)
+                ?: (view.parent as? androidx.compose.ui.window.DialogWindowProvider))?.window
+            androidx.compose.runtime.SideEffect { window?.setDimAmount(0f) }
+        }
+        content()
+    }
 }
 
 // ---------------- Confirmations ----------------
@@ -344,7 +353,7 @@ fun SearchButton(query: String, hint: String, onClick: () -> Unit, modifier: Mod
 @Composable
 fun SearchDialog(
     initial: String, title: String, onSearch: (String) -> Unit, onDismiss: () -> Unit,
-    placeholder: String = "Type at least 2 letters", actionLabel: String = "Search",
+    placeholder: String = "Type at least 2 letters", actionLabel: String = "Search", secret: Boolean = false,
 ) {
     var text by remember { mutableStateOf(androidx.compose.ui.text.input.TextFieldValue(initial, androidx.compose.ui.text.TextRange(initial.length))) }
     val field = remember { FocusRequester() }
@@ -362,6 +371,8 @@ fun SearchDialog(
                 androidx.compose.material3.OutlinedTextField(
                     value = text, onValueChange = { text = it }, singleLine = true,
                     placeholder = { Text(placeholder, color = C.Faint) },
+                    visualTransformation = if (secret) androidx.compose.ui.text.input.PasswordVisualTransformation()
+                        else androidx.compose.ui.text.input.VisualTransformation.None,
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Search),
                     keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSearch = { done() }, onDone = { done() }),
                     colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
@@ -373,7 +384,7 @@ fun SearchDialog(
                 Spacer(Modifier.height(16.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Chip(actionLabel, true, onClick = { done() })
-                    Chip("Clear", false, onClick = { text = androidx.compose.ui.text.input.TextFieldValue("") })
+                    if (actionLabel == "Search") Chip("Clear", false, onClick = { text = androidx.compose.ui.text.input.TextFieldValue("") })
                     Chip("Cancel", false, onClick = onDismiss)
                 }
             }

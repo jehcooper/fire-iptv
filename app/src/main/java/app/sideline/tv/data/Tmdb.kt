@@ -18,7 +18,7 @@ object Tmdb {
 
     val configured: Boolean get() = app.sideline.tv.SidelineApp.prefs.tmdbKey.value.isNotBlank()
 
-    private suspend fun get(path: String, params: Map<String, String> = emptyMap()) = withContext(Dispatchers.IO) {
+    internal suspend fun get(path: String, params: Map<String, String> = emptyMap()) = withContext(Dispatchers.IO) {
         val key = app.sideline.tv.SidelineApp.prefs.tmdbKey.value.trim()
         val b = "https://api.themoviedb.org/3/$path".toHttpUrl().newBuilder()
         params.forEach { (k, v) -> b.addQueryParameter(k, v) }

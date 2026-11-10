@@ -891,9 +891,9 @@ class PlayerActivity : ComponentActivity() {
             delay(200)
             try { curFocus.requestFocus() } catch (_: Exception) {}
         }
-        TvDialog({ channelPanel = false }) {
+        TvDialog({ channelPanel = false }, dim = false) {
             Row(Modifier.fillMaxSize()) {
-                Row(Modifier.fillMaxHeight().width(820.dp).background(Color(0xF20B0F14)).padding(start = 28.dp, top = 24.dp, end = 16.dp)) {
+                Row(Modifier.fillMaxHeight().width(820.dp).background(panelColor()).padding(start = 28.dp, top = 24.dp, end = 16.dp)) {
                     LazyColumn(Modifier.width(220.dp), verticalArrangement = Arrangement.spacedBy(4.dp), contentPadding = PaddingValues(bottom = 40.dp)) {
                         items(groups, key = { it.first }) { (k, name) ->
                             app.sideline.tv.ui.CategoryItem(name, group == k) { group = k }
@@ -915,6 +915,13 @@ class PlayerActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    /** Panel background with your chosen see-through level (Settings → Player panels). */
+    @Composable
+    private fun panelColor(): Color {
+        val t by prefs.panelTransparency.collectAsState()
+        return C.Bg.copy(alpha = (100 - t) / 100f)
     }
 
     @Composable
@@ -962,9 +969,9 @@ class PlayerActivity : ComponentActivity() {
             .sortedWith(compareBy({ it.id !in pinned }, { !SidelineApp.scores.isWatched(it) }, { !it.isLive }, { it.startMillis }))
         LaunchedEffect(Unit) { SidelineApp.scores.refreshNow(); delay(250); try { first.requestFocus() } catch (_: Exception) {} }
 
-        TvDialog({ gamesPanel = false }) {
+        TvDialog({ gamesPanel = false }, dim = false) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.CenterEnd) {
-                Column(Modifier.fillMaxHeight().width(620.dp).background(Color(0xF20B0F14)).padding(28.dp)) {
+                Column(Modifier.fillMaxHeight().width(620.dp).background(panelColor()).padding(28.dp)) {
                     Text("Games", color = C.Text, fontSize = 24.sp, fontWeight = FontWeight.Bold)
                     Text("Live now and starting in the next 3 hours, in your leagues.", color = C.Muted, fontSize = 13.sp)
                     Spacer(Modifier.height(12.dp))
@@ -1007,9 +1014,9 @@ class PlayerActivity : ComponentActivity() {
         val scope = androidx.compose.runtime.rememberCoroutineScope()
         val textOn = !player.trackSelectionParameters.disabledTrackTypes.contains(MC.TRACK_TYPE_TEXT)
         LaunchedEffect(Unit) { delay(250); try { first.requestFocus() } catch (_: Exception) {} }
-        TvDialog({ subsPanel = false }) {
+        TvDialog({ subsPanel = false }, dim = false) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.CenterEnd) {
-                Column(Modifier.fillMaxHeight().width(560.dp).background(Color(0xF20B0F14)).padding(28.dp)) {
+                Column(Modifier.fillMaxHeight().width(560.dp).background(panelColor()).padding(28.dp)) {
                     Text("Subtitles", color = C.Text, fontSize = 24.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(12.dp))
                     LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 40.dp)) {
