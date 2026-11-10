@@ -93,14 +93,14 @@ private fun <T> VodBrowser(
     val visibleAll = remember(all, hidden) {
         if (hidden.none { it.startsWith("$kind:") }) all else all.filter { "$kind:${catOf(it)}" !in hidden }
     }
-    val alphabetical = remember(visibleAll) { visibleAll.sortedBy { nameOf(it).lowercase() } }
+
     // Worked out off the main thread so the remote stays responsive with big libraries; search waits for a pause in typing.
     val shown by produceState(initialValue = emptyList<T>(), selected, query, visibleAll) {
         if (selected == FIND) delay(250)
         value = withContext(Dispatchers.Default) {
             when (selected) {
                 ALL -> visibleAll.takeLast(300).reversed()
-                EVERYTHING -> alphabetical
+                EVERYTHING -> visibleAll.sortedBy { nameOf(it).lowercase() }
                 FIND -> if (query.length < 2) emptyList() else visibleAll.asSequence().filter { nameOf(it).contains(query, ignoreCase = true) }.take(300).toList()
                 CONTINUE -> emptyList()
                 else -> all.filter { catOf(it) == selected }

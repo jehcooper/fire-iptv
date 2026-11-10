@@ -892,6 +892,7 @@ class PlayerActivity : ComponentActivity() {
             try { curFocus.requestFocus() } catch (_: Exception) {}
         }
         TvDialog({ channelPanel = false }, dim = false) {
+            androidx.compose.runtime.CompositionLocalProvider(app.sideline.tv.ui.LocalPanelAlpha provides panelAlpha()) {
             Row(Modifier.fillMaxSize()) {
                 Row(Modifier.fillMaxHeight().width(820.dp).background(panelColor()).padding(start = 28.dp, top = 24.dp, end = 16.dp)) {
                     LazyColumn(Modifier.width(220.dp), verticalArrangement = Arrangement.spacedBy(4.dp), contentPadding = PaddingValues(bottom = 40.dp)) {
@@ -914,14 +915,18 @@ class PlayerActivity : ComponentActivity() {
                     }
                 }
             }
+            }
         }
     }
 
     /** Panel background with your chosen see-through level (Settings → Player panels). */
     @Composable
-    private fun panelColor(): Color {
+    private fun panelColor(): Color = C.Bg.copy(alpha = panelAlpha())
+
+    @Composable
+    private fun panelAlpha(): Float {
         val t by prefs.panelTransparency.collectAsState()
-        return C.Bg.copy(alpha = (100 - t) / 100f)
+        return (100 - t) / 100f
     }
 
     @Composable
@@ -970,6 +975,7 @@ class PlayerActivity : ComponentActivity() {
         LaunchedEffect(Unit) { SidelineApp.scores.refreshNow(); delay(250); try { first.requestFocus() } catch (_: Exception) {} }
 
         TvDialog({ gamesPanel = false }, dim = false) {
+            androidx.compose.runtime.CompositionLocalProvider(app.sideline.tv.ui.LocalPanelAlpha provides panelAlpha()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.CenterEnd) {
                 Column(Modifier.fillMaxHeight().width(620.dp).background(panelColor()).padding(28.dp)) {
                     Text("Games", color = C.Text, fontSize = 24.sp, fontWeight = FontWeight.Bold)
@@ -999,6 +1005,7 @@ class PlayerActivity : ComponentActivity() {
                     }
                 }
             }
+            }
         }
     }
 
@@ -1015,6 +1022,7 @@ class PlayerActivity : ComponentActivity() {
         val textOn = !player.trackSelectionParameters.disabledTrackTypes.contains(MC.TRACK_TYPE_TEXT)
         LaunchedEffect(Unit) { delay(250); try { first.requestFocus() } catch (_: Exception) {} }
         TvDialog({ subsPanel = false }, dim = false) {
+            androidx.compose.runtime.CompositionLocalProvider(app.sideline.tv.ui.LocalPanelAlpha provides panelAlpha()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.CenterEnd) {
                 Column(Modifier.fillMaxHeight().width(560.dp).background(panelColor()).padding(28.dp)) {
                     Text("Subtitles", color = C.Text, fontSize = 24.sp, fontWeight = FontWeight.Bold)
@@ -1067,6 +1075,7 @@ class PlayerActivity : ComponentActivity() {
                     }
                 }
             }
+            }
         }
         // Tracks can change after an online subtitle is attached.
         LaunchedEffect(player.currentTracks) { tracks = textTracks() }
@@ -1074,7 +1083,7 @@ class PlayerActivity : ComponentActivity() {
 
     @Composable
     private fun GameRow(g: Game, pinned: Set<String>, followed: Set<String>, watchModifier: Modifier) {
-        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(C.Surface).padding(14.dp)) {
+        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(C.Surface.copy(alpha = app.sideline.tv.ui.LocalPanelAlpha.current)).padding(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (g.isLive) { Pill("LIVE", C.Live, Color.White); Spacer(Modifier.width(8.dp)) }
                 Text(g.title, color = C.Text, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, modifier = Modifier.weight(1f))

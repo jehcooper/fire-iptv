@@ -94,13 +94,41 @@ object Discover {
 
     // ---------------- Matching TMDB titles to your library ----------------
 
+    private val RX_NON_ALNUM = Regex("[^a-z0-9 ]")
+    private val RX_SPACES = Regex("\\s+")
+
     /** "The Batman (2022)", "EN - Batman, The" → "batman" */
     fun norm(s: String): String {
         var t = MovieInfoService.cleanTitle(s).first.lowercase()
-        t = t.replace("&", " and ").replace(Regex("[^a-z0-9 ]"), " ").replace(Regex("\\s+"), " ").trim()
+        t = RX_SPACES.replace(RX_NON_ALNUM.replace(t.replace("&", " and "), " "), " ").trim()
         t = t.removePrefix("the ").removeSuffix(" the")
         return t
     }
+
+    // The library index is built once per library (in the background) and reused, so the tab opens instantly.
+    @Volatile private var cached: Triple<List<Movie>, List<Series>, Index>? = null
+
+    /** Index for these lists; reuses the last one if the library hasn't changed. Call off the main thread. */
+    fun indexFor(movies: List<Movie>, series: List<Series>): Index {
+        cached?.let { (m, s, idx) -> if (m === movies && s === series) return idx }
+        return Index(movies, series).also { cached = Triple(movies, series, it) }
+    }
+
+    /** Prepares the index in the background whenever the library changes, so Discover opens instantly. */
+    fun startWarming(repo: Repository) {
+        scope.launch {
+            kotlinx.coroutines.flow.combine(repo.movies, repo.series) { m, s -> m to s }
+                .collect { (m, s) ->
+                    if (!Tmdb.configured || (m.isEmpty() && s.isEmpty())) return@collect
+                    kotlinx.coroutines.delay(3_000)  // let start-up finish first
+                    kotlinx.coroutines.withContext(Dispatchers.Default) { indexFor(m, s) }
+                }
+        }
+    }
+
+    /** Already-built index for these lists, if any (lets the screen show rows immediately). */
+    fun cachedIndex(movies: List<Movie>, series: List<Series>): Index? =
+        cached?.let { (m, s, idx) -> if (m === movies && s === series) idx else null }
 
     class Index(movies: List<Movie>, series: List<Series>) {
         private val m: Map<String, List<Movie>> = movies.groupBy { norm(it.name) }

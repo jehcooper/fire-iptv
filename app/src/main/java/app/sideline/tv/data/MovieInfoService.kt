@@ -41,17 +41,26 @@ object MovieInfoService {
         return info
     }
 
+    // Built once: compiling these for every title made big libraries slow (and froze Discover).
+    private val RX_PREFIX = Regex("^\\s*[|\\[]?[A-Za-z]{2,3}[|\\]]?\\s*[-:|]\\s*")
+    private val RX_BRACKETS = Regex("\\[.*?]")
+    private val RX_YEAR_PARENS = Regex("\\((19|20)\\d{2}\\)")
+    private val RX_YEAR_END = Regex("\\b(19|20)\\d{2}\\s*$")
+    private val RX_QUALITY = Regex("(?i)\\b(4k|uhd|fhd|hd|sd|hevc|x265|x264|1080p|720p|2160p|multi|sub|dub|vostfr|cam|ts)\\b")
+    private val RX_SPACES = Regex("\\s+")
+
     /** "EN - The Batman (2022) [4K]" → ("The Batman", "2022") */
     fun cleanTitle(raw: String): Pair<String, String?> {
-        var t = raw
-        t = t.replace(Regex("^\\s*[|\\[]?[A-Za-z]{2,3}[|\\]]?\\s*[-:|]\\s*"), "")   // language/country prefix
-        t = t.replace(Regex("\\[.*?]"), " ")
-        val year = Regex("\\((19|20)\\d{2}\\)").find(t)?.value?.trim('(', ')')
-            ?: Regex("\\b(19|20)\\d{2}\\s*$").find(t.trim())?.value?.trim()
-        t = t.replace(Regex("\\((19|20)\\d{2}\\)"), " ")
-        if (year != null) t = t.replace(Regex("\\b$year\\s*$"), " ")
-        t = t.replace(Regex("(?i)\\b(4k|uhd|fhd|hd|sd|hevc|x265|x264|1080p|720p|2160p|multi|sub|dub|vostfr|cam|ts)\\b"), " ")
-        t = t.replace(Regex("\\s+"), " ").trim(' ', '-', '|', ':')
+        var t = RX_PREFIX.replace(raw, "")
+        t = RX_BRACKETS.replace(t, " ")
+        var year = RX_YEAR_PARENS.find(t)?.value?.trim('(', ')')
+        t = RX_YEAR_PARENS.replace(t, " ")
+        if (year == null) {
+            val m = RX_YEAR_END.find(t.trim())
+            if (m != null) { year = m.value.trim(); t = t.trim().removeSuffix(m.value).trimEnd() }
+        }
+        t = RX_QUALITY.replace(t, " ")
+        t = RX_SPACES.replace(t, " ").trim(' ', '-', '|', ':')
         return t to year
     }
 }

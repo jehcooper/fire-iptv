@@ -26,6 +26,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.produceState
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -58,8 +61,15 @@ fun DiscoverScreen(goTo: (Tab) -> Unit) {
     var openInfo by remember { mutableStateOf<Discover.Title?>(null) }
 
     LaunchedEffect(tmdbKey) { Discover.load() }
-    val index = remember(movies, series) { Discover.Index(movies, series) }
-    val rows = remember(raw, index, onlyPlayable) { Discover.rows(raw, index, onlyPlayable) }
+    // Matching against your library is done in the background (never on the screen's thread) and reused.
+    val rows by produceState(
+        initialValue = Discover.cachedIndex(movies, series)?.let { Discover.rows(raw, it, onlyPlayable) },
+        raw, movies, series, onlyPlayable,
+    ) {
+        value = withContext(Dispatchers.Default) {
+            Discover.rows(raw, Discover.indexFor(movies, series), onlyPlayable)
+        }
+    }
 
     fun open(i: Discover.Item) {
         when {
@@ -83,7 +93,16 @@ fun DiscoverScreen(goTo: (Tab) -> Unit) {
         return
     }
 
-    val hero = rows.firstOrNull()?.items?.firstOrNull { it.t.backdrop != null }
+    val readyRows = rows
+    if (readyRows == null) {
+        Row(Modifier.fillMaxSize().padding(48.dp), verticalAlignment = Alignment.Top) {
+            androidx.compose.material3.CircularProgressIndicator(color = C.Accent, strokeWidth = 2.dp, modifier = Modifier.size(22.dp))
+            Spacer(Modifier.width(12.dp))
+            Text("Matching what's trending with your library…", color = C.Muted, fontSize = 16.sp)
+        }
+        return
+    }
+    val hero = readyRows.firstOrNull()?.items?.firstOrNull { it.t.backdrop != null }
     LazyColumn(contentPadding = PaddingValues(bottom = 60.dp), verticalArrangement = Arrangement.spacedBy(22.dp)) {
         if (hero != null) item { Hero(hero, onClick = { open(hero) }) }
         item {
@@ -93,13 +112,13 @@ fun DiscoverScreen(goTo: (Tab) -> Unit) {
                 if (status.isNotBlank()) Text(status, color = C.Muted, fontSize = 13.sp)
             }
         }
-        if (rows.isEmpty()) item {
+        if (readyRows.isEmpty()) item {
             EmptyState(
                 if (raw.isEmpty()) "Loading Discover…" else "Nothing from these lists is in your library yet",
                 if (raw.isEmpty()) "Fetching what's trending." else "Turn off \"Only what I can play\" to see everything that's trending.",
             )
         }
-        items(rows, key = { it.title }) { row ->
+        items(readyRows, key = { it.title }) { row ->
             Column(Modifier.padding(start = 48.dp)) {
                 SectionTitle(row.title)
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(end = 48.dp, top = 4.dp, bottom = 4.dp)) {

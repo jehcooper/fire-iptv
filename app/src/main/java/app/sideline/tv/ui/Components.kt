@@ -67,6 +67,12 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+/**
+ * How opaque cards are drawn (1 = solid). Player panels lower it to the see-through level set in Settings,
+ * so rows and buttons are as see-through as the panel itself.
+ */
+val LocalPanelAlpha = androidx.compose.runtime.compositionLocalOf { 1f }
+
 /** The basic remote-friendly tile: grows and lights up when focused. Menu button = secondary action. */
 @Composable
 fun FocusCard(
@@ -80,6 +86,7 @@ fun FocusCard(
 ) {
     var focused by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(if (focused) scaleOnFocus else 1f, label = "scale")
+    val panelAlpha = LocalPanelAlpha.current
     Box(
         modifier
             .graphicsLayer { scaleX = scale; scaleY = scale }
@@ -94,7 +101,7 @@ fun FocusCard(
                 } else false
             }
             .clip(shape)
-            .background(if (focused) C.Surface2 else C.Surface)
+            .background(if (focused) C.Surface2.copy(alpha = panelAlpha) else C.Surface.copy(alpha = panelAlpha))
             .border(if (focused) 3.dp else 0.dp, if (focused) C.Accent else Color.Transparent, shape)
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick),
     ) { content(focused) }

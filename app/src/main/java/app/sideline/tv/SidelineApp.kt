@@ -26,6 +26,7 @@ class SidelineApp : Application(), ImageLoaderFactory {
         reminders = app.sideline.tv.data.Reminders(this).also { it.start() }
         if (prefs.accounts.value.isNotEmpty()) repo.refresh()
         scores.start()
+        app.sideline.tv.data.Discover.startWarming(repo)
 
         // Track whether any of our screens is showing, so score polling pauses when the app is in the background.
         registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
