@@ -35,6 +35,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -631,8 +632,17 @@ private fun BackupDialog(onDone: () -> Unit) {
                 if (a == null) {
                     Text(status.ifBlank { "Couldn't start the backup page." }, color = C.Live, fontSize = 15.sp)
                 } else {
-                    Text("On a phone or computer connected to the same Wi-Fi, open this address in the web browser:", color = C.Muted, fontSize = 15.sp)
-                    Text(a, color = C.Accent, fontSize = 30.sp, fontWeight = FontWeight.Bold)
+                    Text("On a phone or computer connected to the same Wi-Fi:", color = C.Muted, fontSize = 15.sp)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        // Scan with a phone camera to open the page directly.
+                        QrCode(a, Modifier.size(170.dp))
+                        Spacer(Modifier.width(24.dp))
+                        Column {
+                            Text("Scan with your phone's camera", color = C.Text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                            Text("or type this address:", color = C.Muted, fontSize = 14.sp)
+                            Text(a, color = C.Accent, fontSize = 26.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 4.dp))
+                        }
+                    }
                     Text("There you can download a backup file, or upload one to restore (which restarts Cooper TV). " +
                         "The page only works while this screen is open.", color = C.Muted, fontSize = 14.sp)
                     if (status.isNotBlank()) Text(status, color = C.Gold, fontSize = 15.sp)
@@ -694,4 +704,25 @@ private fun SpeedTestDialog(onDone: () -> Unit) {
             }
         }
     }
+}
+
+/** Black-on-white QR code for [text] (with the quiet margin scanners need). */
+@Composable
+private fun QrCode(text: String, modifier: Modifier = Modifier) {
+    val bitmap = remember(text) {
+        try {
+            val hints = mapOf(com.google.zxing.EncodeHintType.MARGIN to 2,
+                com.google.zxing.EncodeHintType.ERROR_CORRECTION to com.google.zxing.qrcode.decoder.ErrorCorrectionLevel.M)
+            val m = com.google.zxing.qrcode.QRCodeWriter().encode(text, com.google.zxing.BarcodeFormat.QR_CODE, 0, 0, hints)
+            val size = m.width
+            val px = IntArray(size * size) { i -> if (m.get(i % size, i / size)) android.graphics.Color.BLACK else android.graphics.Color.WHITE }
+            android.graphics.Bitmap.createBitmap(px, size, size, android.graphics.Bitmap.Config.RGB_565).asImageBitmap()
+        } catch (e: Exception) { null }
+    } ?: return
+    androidx.compose.foundation.Image(
+        bitmap = bitmap, contentDescription = "QR code for $text",
+        // Crisp square modules: no smoothing when scaling the tiny bitmap up.
+        filterQuality = androidx.compose.ui.graphics.FilterQuality.None,
+        modifier = modifier.clip(RoundedCornerShape(8.dp)),
+    )
 }

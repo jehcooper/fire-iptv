@@ -73,6 +73,8 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation("io.coil-kt:coil-compose:2.7.0")
+    // QR codes (backup page address) — ZXing's core encoder only, no camera code.
+    implementation("com.google.zxing:core:3.5.3")
     // Lets Android pre-compile the UI libraries' hot code at install time (they ship baseline profiles).
     implementation("androidx.profileinstaller:profileinstaller:1.3.1")
 }
