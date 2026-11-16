@@ -87,7 +87,9 @@ object Discover {
                     _raw.value = result
                     loadedAt = System.currentTimeMillis()
                     _status.value = ""
-                } else _status.value = "Couldn't reach TMDB. Check the TMDB key in Settings."
+                } else _status.value = Tmdb.lastError.value ?: "Couldn't get lists from TMDB. Try Refresh in a minute."
+            } catch (e: Exception) {
+                _status.value = Tmdb.lastError.value ?: (e.message ?: "Couldn't reach TMDB")
             } finally { loading = false }
         }
     }

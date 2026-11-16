@@ -85,23 +85,23 @@ fun SportsScreen(goTo: (Tab) -> Unit) {
             EmptyState("No games right now", if (board.isEmpty()) "Loading scores…" else "Nothing scheduled today in these leagues.")
             return@Column
         }
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 60.dp, top = 8.dp)) {
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp), contentPadding = PaddingValues(bottom = 60.dp, top = 4.dp)) {
             // Each section (Live / Coming up / Final) is split into one row per league.
             val order = leagues.map { it.id }
             listOf("Live" to live, "Coming up" to upcoming, "Final" to finals).forEach { (title, list) ->
                 if (list.isNotEmpty()) {
                     item(key = "h-$title") {
-                        Text("$title · ${list.size}", color = if (title == "Live") C.Live else C.Text, fontSize = 22.sp,
-                            fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 6.dp))
+                        Text("$title · ${list.size}", color = if (title == "Live") C.Live else C.Text, fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 4.dp))
                     }
                     list.groupBy { it.leagueId }.entries.sortedBy { order.indexOf(it.key).let { i -> if (i < 0) 999 else i } }.forEach { (lid, games) ->
                         item(key = "$title-$lid") {
                             Column {
-                                Text("${Leagues.byId(lid)?.name ?: lid}  (${games.size})", color = C.Accent, fontSize = 16.sp,
-                                    fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 4.dp))
-                                LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(vertical = 8.dp)) {
+                                Text("${Leagues.byId(lid)?.name ?: lid}  (${games.size})", color = C.Accent, fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold)
+                                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(vertical = 4.dp)) {
                                     items(games, key = { it.id }) { g ->
-                                        GameCard(g, g.id in followed, spoilerFree, onClick = { openGame = g }, onMenu = { prefs.toggleFollow(g.id) })
+                                        GameCard(g, g.id in followed, spoilerFree, onClick = { openGame = g }, onMenu = { prefs.toggleFollow(g.id) }, compact = true)
                                     }
                                 }
                             }
@@ -153,16 +153,16 @@ fun MatchRow(m: ChannelMatch, onClick: () -> Unit, modifier: Modifier = Modifier
 }
 
 @Composable
-fun ScoreHeader(live: Game, spoilerFree: Boolean) {
+fun ScoreHeader(live: Game, spoilerFree: Boolean, compact: Boolean = false) {
     Text(Leagues.byId(live.leagueId)?.name ?: "", color = C.Accent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
     Spacer(Modifier.height(8.dp))
     if (live.competitors.size == 2) {
         live.competitors.sortedBy { it.home }.forEach { c ->
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 6.dp)) {
-                AsyncImage(model = c.logo, contentDescription = null, modifier = Modifier.size(44.dp))
-                Spacer(Modifier.width(14.dp))
-                Text(c.name, color = C.Text, fontSize = 21.sp, modifier = Modifier.weight(1f), maxLines = 1)
-                if (live.state != "pre") Text(if (spoilerFree) "•" else c.score, color = C.Text, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+                AsyncImage(model = c.logo, contentDescription = null, modifier = Modifier.size(if (compact) 30.dp else 44.dp))
+                Spacer(Modifier.width(if (compact) 10.dp else 14.dp))
+                Text(c.name, color = C.Text, fontSize = if (compact) 17.sp else 21.sp, modifier = Modifier.weight(1f), maxLines = 1)
+                if (live.state != "pre") Text(if (spoilerFree) "•" else c.score, color = C.Text, fontSize = if (compact) 22.sp else 28.sp, fontWeight = FontWeight.Bold)
             }
         }
     } else {
@@ -189,45 +189,124 @@ fun GameSheet(game: Game, onDismiss: () -> Unit) {
     val live = liveGame(game)
     val matches = rememberMatches(game)
     val first = remember { FocusRequester() }
+    var detail by remember(game.id) { mutableStateOf<app.sideline.tv.sports.GameDetail?>(null) }
 
-    // Keep the clock and score fresh while this panel is open.
+    // Keep the clock, score and game detail fresh while this panel is open.
     LaunchedEffect(game.id) {
         while (true) { SidelineApp.scores.refreshNow(); delay(15_000) }
+    }
+    LaunchedEffect(game.id) {
+        while (true) {
+            app.sideline.tv.sports.GameDetails.load(SidelineApp.scores.game(game.id) ?: game)?.let { detail = it }
+            delay(if ((SidelineApp.scores.game(game.id) ?: game).isLive) 30_000 else 5 * 60_000)
+        }
     }
     LaunchedEffect(Unit) { delay(200); try { first.requestFocus() } catch (_: Exception) {} }
 
     TvDialog(onDismiss) {
         Box(Modifier.fillMaxSize().background(Color(0xCC000000)), contentAlignment = Alignment.CenterEnd) {
-            Column(Modifier.fillMaxHeight().width(600.dp).background(C.Surface).padding(36.dp)) {
-                ScoreHeader(live, spoilerFree)
-                if (!spoilerFree) LiveDetailsFull(live)
-                Spacer(Modifier.height(16.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(Modifier.fillMaxHeight().width(860.dp).background(C.Surface).padding(start = 28.dp, top = 24.dp, end = 20.dp)) {
+                // Left: score and everything about the game.
+                LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 40.dp)) {
+                    item { ScoreHeader(live, spoilerFree, compact = true) }
+                    if (!spoilerFree) {
+                        item { LiveDetailsFull(live) }
+                        detail?.let { d -> item { GameDetailView(d) } }
+                    }
+                }
+                Spacer(Modifier.width(20.dp))
+                // Right: actions and channels showing it.
+                Column(Modifier.width(300.dp)) {
                     Chip(if (live.id in followed) "🔔 Pop-ups on" else "🔕 Pop-ups off", live.id in followed,
                         onClick = { prefs.toggleFollow(live.id) }, modifier = Modifier.focusRequester(first))
+                    Spacer(Modifier.height(8.dp))
                     Chip(if (live.id in pinned) "📌 Pinned" else "📌 Pin score", live.id in pinned,
                         onClick = { prefs.togglePin(live.id) })
-                }
-                Text("Pinned scores show along the bottom while you watch.", color = C.Faint, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
-                Spacer(Modifier.height(14.dp))
-                Text("Channels showing this game", color = C.Muted, fontSize = 13.sp)
-                Spacer(Modifier.height(6.dp))
-                when {
-                    matches == null -> Row(verticalAlignment = Alignment.CenterVertically) {
-                        CircularProgressIndicator(color = C.Accent, strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(10.dp))
-                        Text("Searching your channels…", color = C.Muted)
-                    }
-                    matches.isEmpty() -> Text(
-                        "No channel found yet. Still checking the TV guide in the background; or try the Live TV tab's sports categories.",
-                        color = C.Muted, fontSize = 15.sp,
-                    )
-                    else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 40.dp)) {
-                        items(matches, key = { it.channel.key }) { m ->
-                            MatchRow(m, onClick = { Play.channel(ctx, m.channel, matches.map { it.channel }) })
+                    Text("Pinned scores show along the bottom while you watch.", color = C.Faint, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
+                    Spacer(Modifier.height(12.dp))
+                    Text("Channels showing this game", color = C.Muted, fontSize = 12.sp)
+                    Spacer(Modifier.height(6.dp))
+                    when {
+                        matches == null -> Row(verticalAlignment = Alignment.CenterVertically) {
+                            CircularProgressIndicator(color = C.Accent, strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Searching your channels…", color = C.Muted, fontSize = 13.sp)
+                        }
+                        matches.isEmpty() -> Text(
+                            "No channel found yet. Still checking the TV guide; or try Live TV's sports categories.",
+                            color = C.Muted, fontSize = 13.sp,
+                        )
+                        else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp), contentPadding = PaddingValues(bottom = 40.dp)) {
+                            items(matches, key = { it.channel.key }) { m ->
+                                MatchRow(m, onClick = { Play.channel(ctx, m.channel, matches.map { it.channel }) })
+                            }
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+/** Basketball/hockey extras: period table, shots, leaders, team stats, goals and penalties by period, goalies. */
+@Composable
+fun GameDetailView(d: app.sideline.tv.sports.GameDetail) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        if (d.periodLines.isNotEmpty()) PeriodTable(if (d.shotsLines.isNotEmpty()) "Goals" else "Score", d.periodHeaders, d.periodLines)
+        if (d.shotsLines.isNotEmpty()) PeriodTable("Shots on goal", d.periodHeaders, d.shotsLines)
+        if (d.goalsByPeriod.isNotEmpty()) DetailBlock("Goals") {
+            d.goalsByPeriod.forEach { (p, lines) ->
+                Text(p, color = C.Accent, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 2.dp))
+                lines.forEach { Text(it, color = C.Text, fontSize = 12.sp) }
+            }
+        }
+        if (d.penaltiesByPeriod.isNotEmpty()) DetailBlock("Penalties") {
+            d.penaltiesByPeriod.forEach { (p, lines) ->
+                Text(p, color = C.Accent, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 2.dp))
+                lines.forEach { Text(it, color = C.Muted, fontSize = 12.sp) }
+            }
+        }
+        if (d.goalies.isNotEmpty()) DetailBlock("Goalies") { d.goalies.forEach { Text(it, color = C.Text, fontSize = 12.sp) } }
+        if (d.leaders.isNotEmpty()) DetailBlock("Leaders") {
+            d.leaders.forEach { (team, cats) ->
+                Text("$team  " + cats.joinToString("   ") { "${it.first}: ${it.second}" }, color = C.Text, fontSize = 12.sp)
+            }
+        }
+        if (d.teamStats.isNotEmpty()) DetailBlock("Team stats") {
+            val (a, h) = d.periodLines.map { it.first }.let { (it.getOrNull(0) ?: "Away") to (it.getOrNull(1) ?: "Home") }
+            Row { Text("", modifier = Modifier.width(110.dp)); Text(a, color = C.Faint, fontSize = 11.sp, modifier = Modifier.width(80.dp)); Text(h, color = C.Faint, fontSize = 11.sp) }
+            d.teamStats.forEach { (label, x, y) ->
+                Row {
+                    Text(label, color = C.Muted, fontSize = 12.sp, modifier = Modifier.width(110.dp))
+                    Text(x, color = C.Text, fontSize = 12.sp, modifier = Modifier.width(80.dp))
+                    Text(y, color = C.Text, fontSize = 12.sp)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DetailBlock(title: String, content: @Composable () -> Unit) {
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(C.Surface2).padding(10.dp)) {
+        Text(title, color = C.Text, fontSize = 13.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 4.dp))
+        content()
+    }
+}
+
+@Composable
+private fun PeriodTable(title: String, headers: List<String>, lines: List<Triple<String, List<String>, String>>) {
+    DetailBlock(title) {
+        Row {
+            Text("", modifier = Modifier.width(60.dp))
+            headers.forEach { Text(it, color = C.Faint, fontSize = 11.sp, modifier = Modifier.width(38.dp)) }
+            Text("T", color = C.Faint, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+        }
+        lines.forEach { (team, vals, total) ->
+            Row {
+                Text(team, color = C.Text, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(60.dp))
+                headers.indices.forEach { i -> Text(vals.getOrNull(i) ?: "-", color = C.Muted, fontSize = 12.sp, modifier = Modifier.width(38.dp)) }
+                Text(total, color = C.Text, fontSize = 12.sp, fontWeight = FontWeight.Bold)
             }
         }
     }

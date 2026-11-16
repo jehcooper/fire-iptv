@@ -18,18 +18,42 @@ object Tmdb {
 
     val configured: Boolean get() = app.sideline.tv.SidelineApp.prefs.tmdbKey.value.isNotBlank()
 
+    /** TMDB's main and alternate API addresses; the alternate sometimes gets through where the main one is blocked. */
+    private val hosts = listOf("api.themoviedb.org", "api.tmdb.org")
+    @Volatile private var goodHost = hosts[0]
+
+    private val _lastError = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
+    /** Why TMDB couldn't be reached last time (null if it worked). */
+    val lastError: kotlinx.coroutines.flow.StateFlow<String?> = _lastError
+
     internal suspend fun get(path: String, params: Map<String, String> = emptyMap()) = withContext(Dispatchers.IO) {
         val key = app.sideline.tv.SidelineApp.prefs.tmdbKey.value.trim()
-        val b = "https://api.themoviedb.org/3/$path".toHttpUrl().newBuilder()
-        params.forEach { (k, v) -> b.addQueryParameter(k, v) }
         val bearer = key.length > 60   // read-access tokens are long JWTs; v3 keys are 32 chars
-        if (!bearer) b.addQueryParameter("api_key", key)
-        val req = Request.Builder().url(b.build()).header("Accept", "application/json")
-        if (bearer) req.header("Authorization", "Bearer $key")
-        http.newCall(req.build()).execute().use { r ->
-            if (!r.isSuccessful) throw IllegalStateException("TMDB answered ${r.code}")
-            Net.json.parseToJsonElement(r.body?.string().orEmpty()).obj()
+        var lastProblem: Exception? = null
+        for (host in listOf(goodHost) + hosts.filter { it != goodHost }) {
+            try {
+                val b = "https://$host/3/$path".toHttpUrl().newBuilder()
+                params.forEach { (k, v) -> b.addQueryParameter(k, v) }
+                if (!bearer) b.addQueryParameter("api_key", key)
+                val req = Request.Builder().url(b.build()).header("Accept", "application/json")
+                if (bearer) req.header("Authorization", "Bearer $key")
+                val result = http.newCall(req.build()).execute().use { r ->
+                    if (r.code == 401) throw SecurityException("TMDB didn't accept the key. Check it in Settings → Movie & series info.")
+                    if (!r.isSuccessful) throw IllegalStateException("TMDB answered ${r.code}")
+                    Net.json.parseToJsonElement(r.body?.string().orEmpty()).obj()
+                }
+                goodHost = host
+                _lastError.value = null
+                return@withContext result
+            } catch (e: SecurityException) {
+                _lastError.value = e.message; throw e
+            } catch (e: Exception) {
+                lastProblem = e   // network block or outage: try the other address
+            }
         }
+        _lastError.value = "Couldn't reach TMDB from this internet connection. Some providers (e.g. Jio and BSNL in India) block it; " +
+            "a VPN on the Fire TV or router gets around that. (${lastProblem?.message ?: "no response"})"
+        throw lastProblem ?: IllegalStateException("TMDB unreachable")
     }
 
     /** US rating first, then Canadian (labelled), then any. */

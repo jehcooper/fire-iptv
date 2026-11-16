@@ -114,8 +114,16 @@ fun DiscoverScreen(goTo: (Tab) -> Unit) {
         }
         if (readyRows.isEmpty()) item {
             EmptyState(
-                if (raw.isEmpty()) "Loading Discover…" else "Nothing from these lists is in your library yet",
-                if (raw.isEmpty()) "Fetching what's trending." else "Turn off \"Only what I can play\" to see everything that's trending.",
+                when {
+                    raw.isNotEmpty() -> "Nothing from these lists is in your library yet"
+                    status.startsWith("Updating") || status.isBlank() -> "Loading Discover…"
+                    else -> "Discover can't load right now"
+                },
+                when {
+                    raw.isNotEmpty() -> "Turn off \"Only what I can play\" to see everything that's trending."
+                    status.startsWith("Updating") || status.isBlank() -> "Fetching what's trending."
+                    else -> status
+                },
             )
         }
         items(readyRows, key = { it.title }) { row ->

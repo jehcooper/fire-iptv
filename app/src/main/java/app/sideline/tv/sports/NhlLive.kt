@@ -46,6 +46,17 @@ object NhlLive {
         return null
     }
 
+    /** NHL game id for an ESPN game (today's games), for the detailed game screen. */
+    suspend fun gameIdFor(g: Game): Long? {
+        idMap[g.id]?.let { return it }
+        val away = g.away ?: return null
+        val home = g.home ?: return null
+        val all = try { fetch() } catch (_: Exception) { return null }
+        val l = all.firstOrNull { matches(it.awayAbbr, it.awayName, away) && matches(it.homeAbbr, it.homeName, home) } ?: return null
+        idMap[g.id] = l.gameId
+        return l.gameId
+    }
+
     /** Last goal per NHL game id, refreshed only when that game's score changes. */
     private val goalCache = java.util.concurrent.ConcurrentHashMap<Long, Triple<Int, String?, String?>>() // totalScore → (lastGoal, situationCode)
 

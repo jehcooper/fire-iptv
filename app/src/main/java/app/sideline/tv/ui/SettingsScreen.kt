@@ -81,6 +81,7 @@ fun SettingsScreen() {
     var editGuideUrl by remember { mutableStateOf(false) }
     var backupOpen by remember { mutableStateOf(false) }
     var speedTest by remember { mutableStateOf(false) }
+    var leagueOptsFor by remember { mutableStateOf<String?>(null) }
     val omdbKey by prefs.omdbKey.collectAsState()
     val tmdbKey by prefs.tmdbKey.collectAsState()
     val hidden by prefs.hiddenCats.collectAsState()
@@ -126,6 +127,22 @@ fun SettingsScreen() {
                     Text(group, color = C.Faint, fontSize = 13.sp, modifier = Modifier.padding(top = 10.dp, bottom = 4.dp))
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(vertical = 6.dp)) {
                         items(list, key = { it.id }) { l -> Chip(l.name, l.id in favLeagues, onClick = { prefs.toggleLeague(l.id); SidelineApp.scores.refreshNow() }) }
+                    }
+                }
+            }
+        }
+
+        item {
+            Column {
+                SectionTitle("Follow leagues")
+                Text("For each league you've picked, choose what it shows, whether or not you follow a team in it.",
+                    color = C.Muted, fontSize = 14.sp)
+                val opts by prefs.leagueOpts.collectAsState()
+                val picked = Leagues.all.filter { it.id in favLeagues } + confs.filter { it.id in favConfs }.map { Leagues.conferenceLeague(it) }
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(vertical = 8.dp)) {
+                    items(picked, key = { it.id }) { l ->
+                        val on = listOf("standings" to "table", "live" to "live", "popups" to "pop-ups").filter { "${l.id}|${it.first}" in opts }.map { it.second }
+                        Chip(if (on.isEmpty()) l.tag else "${l.tag}: ${on.joinToString(" · ")}", on.isNotEmpty(), onClick = { leagueOptsFor = l.id })
                     }
                 }
             }
@@ -315,6 +332,7 @@ fun SettingsScreen() {
     ) { editTmdb = false }
     if (backupOpen) BackupDialog { backupOpen = false }
     if (speedTest) SpeedTestDialog { speedTest = false }
+    leagueOptsFor?.let { LeagueOptionsDialog(it) { leagueOptsFor = null } }
     if (editGuideUrl) KeyEditor(
         "Custom TV guide (XMLTV)",
         "Paste the address of an XMLTV guide (.xml or .xml.gz). Channels are matched by their guide id, so it must use the same ids as your provider. Catch-up from this guide may be off by the time-zone difference.",
@@ -725,4 +743,36 @@ private fun QrCode(text: String, modifier: Modifier = Modifier) {
         filterQuality = androidx.compose.ui.graphics.FilterQuality.None,
         modifier = modifier.clip(RoundedCornerShape(8.dp)),
     )
+}
+
+/** On/off choices for one followed league. */
+@Composable
+private fun LeagueOptionsDialog(leagueId: String, onDone: () -> Unit) {
+    val prefs = SidelineApp.prefs
+    val opts by prefs.leagueOpts.collectAsState()
+    val l = Leagues.byId(leagueId)
+    val first = remember { FocusRequester() }
+    LaunchedEffect(Unit) { delay(200); try { first.requestFocus() } catch (_: Exception) {} }
+    TvDialog(onDone) {
+        Box(Modifier.fillMaxSize().background(C.Bg.copy(alpha = 0.96f)), contentAlignment = Alignment.Center) {
+            Column(Modifier.width(620.dp).clip(RoundedCornerShape(18.dp)).background(C.Surface).padding(28.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Follow ${l?.name ?: leagueId}", color = C.Text, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                val choices = listOf(
+                    Triple("standings", "League table on Home", "Live standings with 'if it ended now' moves"),
+                    Triple("live", "Its live games on Home", "Shown in the My Teams & followed games row"),
+                    Triple("popups", "Score pop-ups for all its games", "Start, score and final pop-ups (no score pop-ups for basketball)"),
+                )
+                choices.forEachIndexed { i, (key, label, help) ->
+                    val on = "$leagueId|$key" in opts
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Chip(if (on) "✓ $label" else label, on, onClick = { prefs.toggleLeagueOpt(leagueId, key) },
+                            modifier = if (i == 0) Modifier.focusRequester(first) else Modifier)
+                        Spacer(Modifier.width(12.dp))
+                        Text(help, color = C.Faint, fontSize = 12.sp)
+                    }
+                }
+                Chip("Done", false, onClick = onDone)
+            }
+        }
+    }
 }

@@ -18,6 +18,15 @@ class Prefs(context: Context) {
     private val _favLeagues = MutableStateFlow(sp.getStringSet("favLeagues", null)?.toSet() ?: DEFAULT_LEAGUES)
     val favLeagues: StateFlow<Set<String>> = _favLeagues
 
+    /**
+     * Per-league follow options, as "leagueId|option": "standings" (table on Home), "live" (its live games
+     * on Home), "popups" (score pop-ups for all its games).
+     */
+    private val _leagueOpts = MutableStateFlow(sp.getStringSet("leagueOpts", emptySet())!!.toSet())
+    val leagueOpts: StateFlow<Set<String>> = _leagueOpts
+    fun toggleLeagueOpt(leagueId: String, opt: String) = toggle(_leagueOpts, "leagueOpts", "$leagueId|$opt")
+    fun leagueHas(leagueId: String, opt: String) = "$leagueId|$opt" in _leagueOpts.value
+
     /** FBS conference ids, e.g. "5" for the Big Ten. */
     private val _favConfs = MutableStateFlow(sp.getStringSet("favConfs", emptySet())!!.toSet())
     val favConferences: StateFlow<Set<String>> = _favConfs

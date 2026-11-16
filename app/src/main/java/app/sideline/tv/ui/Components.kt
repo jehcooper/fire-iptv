@@ -59,6 +59,7 @@ import androidx.compose.ui.window.DialogProperties
 import app.sideline.tv.SidelineApp
 import app.sideline.tv.sports.AlertKind
 import app.sideline.tv.sports.Game
+import app.sideline.tv.sports.Leagues
 import app.sideline.tv.sports.ScoreAlert
 import coil.compose.AsyncImage
 import androidx.lifecycle.repeatOnLifecycle
@@ -137,43 +138,55 @@ fun dayTimeOf(ms: Long): String = SimpleDateFormat("EEE h:mm a", Locale.getDefau
 
 /** Scoreboard tile with team colours bleeding in from the edges. */
 @Composable
-fun GameCard(game: Game, followed: Boolean, spoilerFree: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, onMenu: (() -> Unit)? = null) {
+fun GameCard(
+    game: Game, followed: Boolean, spoilerFree: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier,
+    onMenu: (() -> Unit)? = null, compact: Boolean = false,
+) {
     val away = game.away
     val home = game.home
     val left = C.hex(away?.color).copy(alpha = 0.55f)
     val right = C.hex(home?.color).copy(alpha = 0.55f)
-    FocusCard(onClick = onClick, onMenu = onMenu, modifier = modifier.width(300.dp).height(150.dp)) { _ ->
+    // Compact = about half the height, for Home's My Teams row and the Sports tab.
+    val w = if (compact) 236.dp else 300.dp
+    val h = if (compact) 80.dp else 150.dp
+    FocusCard(onClick = onClick, onMenu = onMenu, modifier = modifier.width(w).height(h)) { _ ->
         Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(listOf(left, C.Surface, C.Surface, right))))
-        Column(Modifier.fillMaxSize().padding(14.dp)) {
+        Column(Modifier.fillMaxSize().padding(horizontal = if (compact) 10.dp else 14.dp, vertical = if (compact) 6.dp else 14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                when {
-                    game.isLive -> Pill("LIVE", C.Live, Color.White)
-                    game.isFinal -> Pill("FINAL", C.Faint, C.Text)
-                    else -> Pill(if (game.startMillis > 0) dayTimeOf(game.startMillis) else "UPCOMING", C.Surface2, C.Text)
+                val tag = Leagues.byId(game.leagueId)?.tag
+                if (compact && tag != null) {
+                    Text(tag, color = C.Accent, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.width(5.dp))
                 }
-                Spacer(Modifier.width(8.dp))
+                when {
+                    game.isLive -> if (compact) Text("● LIVE", color = C.Live, fontSize = 10.sp, fontWeight = FontWeight.Bold) else Pill("LIVE", C.Live, Color.White)
+                    game.isFinal -> if (compact) Text("FINAL", color = C.Faint, fontSize = 10.sp, fontWeight = FontWeight.Bold) else Pill("FINAL", C.Faint, C.Text)
+                    else -> if (compact) Text(if (game.startMillis > 0) dayTimeOf(game.startMillis) else "", color = C.Muted, fontSize = 10.sp)
+                        else Pill(if (game.startMillis > 0) dayTimeOf(game.startMillis) else "UPCOMING", C.Surface2, C.Text)
+                }
+                Spacer(Modifier.width(6.dp))
                 Text(
                     if (game.isLive || game.isFinal) game.detail else game.broadcasts.take(2).joinToString(" · "),
-                    color = C.Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
+                    color = C.Muted, fontSize = if (compact) 10.sp else 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
                 )
-                if (followed) Text("🔔", fontSize = 14.sp)
+                if (followed) Text("🔔", fontSize = if (compact) 10.sp else 14.sp)
             }
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(if (compact) 3.dp else 10.dp))
             if (game.competitors.size == 2) {
                 game.competitors.sortedBy { it.home }.forEach { c ->
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 3.dp)) {
-                        AsyncImage(model = c.logo, contentDescription = null, modifier = Modifier.size(34.dp), contentScale = ContentScale.Fit)
-                        Spacer(Modifier.width(10.dp))
-                        Text(c.shortName.ifBlank { c.name }, color = C.Text, fontSize = 17.sp, maxLines = 1,
-                            overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = if (compact) 1.dp else 3.dp)) {
+                        AsyncImage(model = c.logo, contentDescription = null, modifier = Modifier.size(if (compact) 20.dp else 34.dp), contentScale = ContentScale.Fit)
+                        Spacer(Modifier.width(if (compact) 6.dp else 10.dp))
+                        Text(if (compact) c.abbr.ifBlank { c.shortName } else c.shortName.ifBlank { c.name }, color = C.Text,
+                            fontSize = if (compact) 13.sp else 17.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                         val shown = if (game.state == "pre") "" else if (spoilerFree) "•" else c.score
-                        Text(shown, color = C.Text, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                        Text(shown, color = C.Text, fontSize = if (compact) 15.sp else 24.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             } else {
-                Text(game.title, color = C.Text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                game.competitors.forEachIndexed { i, c ->
-                    Text("${i + 1}. ${c.name}  ${if (spoilerFree) "" else c.score}", color = C.Muted, fontSize = 14.sp, maxLines = 1)
+                Text(game.title, color = C.Text, fontSize = if (compact) 13.sp else 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                game.competitors.take(if (compact) 1 else 3).forEachIndexed { i, c ->
+                    Text("${i + 1}. ${c.name}  ${if (spoilerFree) "" else c.score}", color = C.Muted, fontSize = if (compact) 11.sp else 14.sp, maxLines = 1)
                 }
             }
         }

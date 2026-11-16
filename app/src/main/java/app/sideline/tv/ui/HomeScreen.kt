@@ -61,8 +61,13 @@ fun HomeScreen(goTo: (Tab) -> Unit) {
 
     // Worked out only when the underlying data changes, not on every recomposition.
     val allGames = remember(board) { board.values.flatten().distinctBy { it.id } }
-    val mine = remember(allGames, followed, favTeams) {
-        allGames.filter { g -> g.id in followed || g.competitors.any { app.sideline.tv.sports.Leagues.teamKey(g.leagueId, it.id) in favTeams } }
+    val leagueOpts by prefs.leagueOpts.collectAsState()
+    val mine = remember(allGames, followed, favTeams, leagueOpts) {
+        allGames.filter { g ->
+            g.id in followed || g.competitors.any { app.sideline.tv.sports.Leagues.teamKey(g.leagueId, it.id) in favTeams } ||
+                // Followed leagues with "live games on Home": their live games join this row.
+                (g.isLive && "${g.leagueId}|live" in leagueOpts)
+        }
             .sortedWith(compareBy({ !it.isLive }, { it.isFinal }, { it.startMillis }))
     }
     val liveNow = remember(allGames, mine) { allGames.filter { it.isLive && it !in mine }.take(15) }
@@ -87,11 +92,21 @@ fun HomeScreen(goTo: (Tab) -> Unit) {
         verticalArrangement = Arrangement.spacedBy(28.dp),
     ) {
         if (errors.isNotEmpty()) item { EmptyState("Some content didn't load", errors.joinToString("\n")) }
-        if (progress.isNotEmpty()) item {
+        val contMovies = progress.filter { it.kind == "movie" }
+        val contSeries = progress.filter { it.kind == "episode" }
+        if (contMovies.isNotEmpty()) item {
             Column {
-                SectionTitle("Continue watching")
+                SectionTitle("Continue watching · Movies")
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    items(progress.take(20), key = { it.key }) { p -> ProgressCard(p, onClick = { Play.resume(ctx, p) }) }
+                    items(contMovies.take(20), key = { it.key }) { p -> ProgressCard(p, onClick = { Play.resume(ctx, p) }) }
+                }
+            }
+        }
+        if (contSeries.isNotEmpty()) item {
+            Column {
+                SectionTitle("Continue watching · Series")
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    items(contSeries.take(20), key = { it.key }) { p -> ProgressCard(p, onClick = { Play.resume(ctx, p) }) }
                 }
             }
         }
@@ -106,16 +121,17 @@ fun HomeScreen(goTo: (Tab) -> Unit) {
         if (mine.isNotEmpty()) item {
             Column {
                 SectionTitle("My Teams & followed games")
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    items(mine, key = { it.id }) { g -> GameCard(g, g.id in followed, spoilerFree, onClick = { openGame = g }) }
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    items(mine, key = { it.id }) { g -> GameCard(g, g.id in followed, spoilerFree, onClick = { openGame = g }, compact = true) }
                 }
             }
         }
+        item { StandingsSection(allGames, favTeams, leagueOpts) }
         if (liveNow.isNotEmpty()) item {
             Column {
                 SectionTitle("Live in your leagues")
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    items(liveNow, key = { it.id }) { g -> GameCard(g, g.id in followed, spoilerFree, onClick = { openGame = g }) }
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    items(liveNow, key = { it.id }) { g -> GameCard(g, g.id in followed, spoilerFree, onClick = { openGame = g }, compact = true) }
                 }
             }
         }

@@ -63,6 +63,7 @@ private const val ALL = "__all"
 private const val FIND = "__search"
 private const val EVERYTHING = "__everything"
 private const val CONTINUE = "__continue"
+private const val FEATURED = "__featured"
 
 @Composable
 private fun <T> VodBrowser(
@@ -74,12 +75,14 @@ private fun <T> VodBrowser(
     nameOf: (T) -> String,
     keyOf: (T) -> String,
     continueItems: List<ProgressEntry>,
+    /** Optional "Featured" view (TMDB rows) shown first. */
+    featured: (@Composable () -> Unit)? = null,
     tile: @Composable (T) -> Unit,
 ) {
     val ctx = LocalContext.current
     val prefs = SidelineApp.prefs
     val hidden by prefs.hiddenCats.collectAsState()
-    var selected by rememberSaveable { mutableStateOf(if (continueItems.isNotEmpty()) CONTINUE else ALL) }
+    var selected by rememberSaveable { mutableStateOf(if (featured != null) FEATURED else if (continueItems.isNotEmpty()) CONTINUE else ALL) }
     var query by rememberSaveable { mutableStateOf("") }
     var searching by remember { mutableStateOf(false) }
     val searchBar = remember { FocusRequester() }
@@ -102,7 +105,7 @@ private fun <T> VodBrowser(
                 ALL -> visibleAll.takeLast(300).reversed()
                 EVERYTHING -> visibleAll.sortedBy { nameOf(it).lowercase() }
                 FIND -> if (query.length < 2) emptyList() else visibleAll.asSequence().filter { nameOf(it).contains(query, ignoreCase = true) }.take(300).toList()
-                CONTINUE -> emptyList()
+                CONTINUE, FEATURED -> emptyList()
                 else -> all.filter { catOf(it) == selected }
             }
         }
@@ -112,6 +115,7 @@ private fun <T> VodBrowser(
 
     Row(Modifier.fillMaxSize().padding(start = 48.dp, end = 32.dp, top = 8.dp)) {
         LazyColumn(Modifier.width(280.dp), verticalArrangement = Arrangement.spacedBy(4.dp), contentPadding = PaddingValues(bottom = 60.dp)) {
+            if (featured != null) item { CategoryItem("✨ Featured", selected == FEATURED) { selected = FEATURED } }
             if (continueItems.isNotEmpty()) item { CategoryItem("▶ Continue watching  (${continueItems.size})", selected == CONTINUE) { selected = CONTINUE } }
             item {
                 // OK always opens the search window (with the last search filled in);
@@ -143,7 +147,9 @@ private fun <T> VodBrowser(
                 SearchButton(query, "Search all titles in every category", onClick = { searching = true }, modifier = Modifier.focusRequester(searchBar))
                 Spacer(Modifier.height(10.dp))
             }
-            if (selected == CONTINUE) {
+            if (selected == FEATURED && featured != null) {
+                featured()
+            } else if (selected == CONTINUE) {
                 LazyVerticalGrid(
                     columns = GridCells.Adaptive(240.dp),
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -196,6 +202,7 @@ fun MoviesScreen() {
     VodBrowser(
         "vod", "No movies yet", cats, movies,
         catOf = { "${it.accountId}:${it.categoryId}" }, nameOf = { it.name }, keyOf = { it.key }, continueItems = cont,
+        featured = if (app.sideline.tv.data.Tmdb.configured) ({ FeaturedMovies(movies) { open = it } }) else null,
     ) { m -> PosterCard(m.name, m.poster, onClick = { open = m }, badge = m.rating?.takeIf { it != "0" && it.isNotBlank() }?.let { "★ ${it.take(3)}" }) }
     open?.let { MovieSheet(it) { open = null } }
 }
@@ -371,4 +378,42 @@ fun SeriesTile(s: Series, onClick: () -> Unit, modifier: Modifier = Modifier) {
                 yes = if (fav) "Remove" else "Add", destructive = fav) { prefs.toggleFavSeries(key) }
         },
     )
+}
+
+/** Movies tab "Featured": trending, new, popular and top-rated movies from TMDB that are in your library. */
+@Composable
+private fun FeaturedMovies(movies: List<Movie>, onOpen: (Movie) -> Unit) {
+    val raw by app.sideline.tv.data.Discover.raw.collectAsState()
+    val status by app.sideline.tv.data.Discover.status.collectAsState()
+    val series by SidelineApp.repo.series.collectAsState()
+    LaunchedEffect(Unit) { app.sideline.tv.data.Discover.load() }
+    val rows by produceState<List<app.sideline.tv.data.Discover.Row>?>(null, raw, movies, series) {
+        value = withContext(Dispatchers.Default) {
+            val movieLists = raw.filter { (_, titles) -> titles.none { it.isTv } }
+            app.sideline.tv.data.Discover.rows(movieLists, app.sideline.tv.data.Discover.indexFor(movies, series), onlyPlayable = true)
+        }
+    }
+    val r = rows
+    when {
+        r == null -> Text("Matching what's trending with your movies…", color = C.Muted, modifier = Modifier.padding(16.dp))
+        r.isEmpty() -> Text(
+            if (raw.isEmpty() && status.isNotBlank() && !status.startsWith("Updating")) status
+            else if (raw.isEmpty()) "Loading what's trending…" else "None of this week's trending movies are in your library yet.",
+            color = C.Muted, modifier = Modifier.padding(16.dp),
+        )
+        else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(start = 8.dp, top = 4.dp, bottom = 60.dp)) {
+            items(r, key = { it.title }) { row ->
+                Column {
+                    Text(row.title, color = C.Text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 6.dp))
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(end = 24.dp, top = 4.dp, bottom = 4.dp)) {
+                        items(row.items, key = { it.t.tmdbId }) { i ->
+                            val m = i.movie ?: return@items
+                            PosterCard(m.name, m.poster ?: i.t.poster, onClick = { onOpen(m) },
+                                badge = i.t.score?.takeIf { it > 0 }?.let { "★ %.1f".format(it) })
+                        }
+                    }
+                }
+            }
+        }
+    }
 }

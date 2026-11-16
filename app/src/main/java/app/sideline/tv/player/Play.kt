@@ -29,6 +29,8 @@ object Play {
     var pending: Item? = null
 
     private fun launch(ctx: Context, item: Item) {
+        // Free the stream connection a Live TV preview may be holding before full playback starts.
+        app.sideline.tv.ui.PreviewControl.stop()
         pending = item
         ctx.startActivity(Intent(ctx, PlayerActivity::class.java))
     }

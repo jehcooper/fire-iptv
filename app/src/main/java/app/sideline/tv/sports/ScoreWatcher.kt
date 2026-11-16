@@ -64,6 +64,8 @@ class ScoreWatcher(private val prefs: Prefs) {
 
     fun isWatched(g: Game): Boolean {
         if (g.id in prefs.followedGames.value || g.id in prefs.pinnedGames.value) return true
+        // Leagues you follow with "score pop-ups for all its games".
+        if (prefs.leagueHas(g.leagueId, "popups")) return true
         if (!prefs.autoFollowTeams.value) return false
         val fav = prefs.favTeams.value
         return g.competitors.any { Leagues.teamKey(g.leagueId, it.id) in fav }

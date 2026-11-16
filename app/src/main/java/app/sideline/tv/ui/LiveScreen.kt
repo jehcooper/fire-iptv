@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -62,9 +63,9 @@ fun CategoryItem(
     // Ordinary categories open as you move over them; special entries (guide, search) need an OK press.
     FocusCard(onClick = onClick, onFocus = if (selectOnFocus) onClick else null, onMenu = onMenu, modifier = modifier.fillMaxWidth(), scaleOnFocus = 1.02f, shape = RoundedCornerShape(10.dp)) { f ->
         Text(
-            name, color = if (selected || f) C.Text else C.Muted, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            name, color = if (selected || f) C.Text else C.Muted, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-            modifier = Modifier.background(if (selected && !f) C.Surface2 else androidx.compose.ui.graphics.Color.Transparent).padding(horizontal = 14.dp, vertical = 10.dp).fillMaxWidth(),
+            modifier = Modifier.background(if (selected && !f) C.Surface2 else androidx.compose.ui.graphics.Color.Transparent).padding(horizontal = 12.dp, vertical = 7.dp).fillMaxWidth(),
         )
     }
 }
@@ -155,8 +156,8 @@ fun LiveScreen() {
 
     if (searching) SearchDialog(query, "Search channels and programmes", onSearch = { query = it; selected = SEARCH; searching = false }, onDismiss = { searching = false })
 
-    Row(Modifier.fillMaxSize().padding(start = 48.dp, end = 48.dp, top = 8.dp)) {
-        LazyColumn(Modifier.width(300.dp), verticalArrangement = Arrangement.spacedBy(4.dp), contentPadding = PaddingValues(bottom = 60.dp)) {
+    Row(Modifier.fillMaxSize().padding(start = 48.dp, end = 48.dp, top = 4.dp)) {
+        LazyColumn(Modifier.width(270.dp), verticalArrangement = Arrangement.spacedBy(3.dp), contentPadding = PaddingValues(bottom = 60.dp)) {
             item { CategoryItem("📺 TV guide view", false, selectOnFocus = false) { guide = true } }
             item {
                 // OK always opens the search window (with the last search filled in);
@@ -183,27 +184,38 @@ fun LiveScreen() {
                     modifier = Modifier.padding(10.dp))
             }
         }
-        Spacer(Modifier.width(28.dp))
+        Spacer(Modifier.width(20.dp))
         Column(Modifier.weight(1f)) {
-            // Preview header: what's on the focused channel now and next.
-            Column(Modifier.fillMaxWidth().height(120.dp).clip(RoundedCornerShape(14.dp)).background(C.Surface).padding(18.dp)) {
-                val c = focusedCh
-                if (c == null) {
-                    Text("Select a channel to watch. Menu (≡) on a channel: favourite, rename, reorder or hide.", color = C.Muted, fontSize = 15.sp)
-                } else {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(c.name, color = C.Text, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, modifier = Modifier.weight(1f))
-                        if (c.hasArchive) Pill("CATCH-UP", C.Gold)
+            // Preview: muted live picture of the focused channel, with now and next beside it.
+            Row(Modifier.fillMaxWidth().height(126.dp).clip(RoundedCornerShape(12.dp)).background(C.Surface)) {
+                LivePreview(focusedCh, Modifier.width(224.dp).fillMaxHeight())
+                Column(Modifier.weight(1f).padding(horizontal = 14.dp, vertical = 10.dp)) {
+                    val c = focusedCh
+                    if (c == null) {
+                        Text("Move through the channels to preview them. OK plays; Menu (≡): favourite, rename, reorder or hide.",
+                            color = C.Muted, fontSize = 13.sp)
+                    } else {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(c.name, color = C.Text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, modifier = Modifier.weight(1f))
+                            if (c.hasArchive) Pill("CATCH-UP", C.Gold)
+                        }
+                        val nowS = System.currentTimeMillis() / 1000
+                        val now = epg.firstOrNull { nowS in it.start until it.end } ?: epg.firstOrNull { it.end > nowS }
+                        val next = now?.let { epg.getOrNull(epg.indexOf(it) + 1) }
+                        if (now != null) {
+                            Text("Now  ${timeOf(now.start * 1000)}  ${now.title}", color = C.Text, fontSize = 13.sp, maxLines = 1, modifier = Modifier.padding(top = 4.dp))
+                            val frac = ((nowS - now.start).toFloat() / (now.end - now.start).coerceAtLeast(1)).coerceIn(0f, 1f)
+                            Box(Modifier.padding(vertical = 4.dp).fillMaxWidth().height(2.dp).background(C.Surface2)) {
+                                Box(Modifier.fillMaxWidth(frac).height(2.dp).background(C.Accent))
+                            }
+                            if (now.description.isNotBlank()) Text(now.description, color = C.Faint, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                        if (next != null) Text("Next ${timeOf(next.start * 1000)}  ${next.title}", color = C.Muted, fontSize = 12.sp, maxLines = 1)
+                        if (now == null) Text("No guide info for this channel", color = C.Faint, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
                     }
-                    val nowS = System.currentTimeMillis() / 1000
-                    val now = epg.firstOrNull { nowS in it.start until it.end } ?: epg.firstOrNull { it.end > nowS }
-                    val next = now?.let { epg.getOrNull(epg.indexOf(it) + 1) }
-                    if (now != null) Text("Now  ${timeOf(now.start * 1000)}  ${now.title}", color = C.Text, fontSize = 15.sp, maxLines = 1, modifier = Modifier.padding(top = 8.dp))
-                    if (next != null) Text("Next ${timeOf(next.start * 1000)}  ${next.title}", color = C.Muted, fontSize = 14.sp, maxLines = 1)
-                    if (now == null) Text("No guide info for this channel", color = C.Faint, fontSize = 14.sp, modifier = Modifier.padding(top = 8.dp))
                 }
             }
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(8.dp))
             if (selected == SEARCH) {
                 SearchButton(query, "Search channels and TV programmes", onClick = { searching = true }, modifier = Modifier.focusRequester(searchBar))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
@@ -231,7 +243,7 @@ fun LiveScreen() {
                     color = C.Muted, modifier = Modifier.padding(16.dp),
                 )
             }
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp), contentPadding = PaddingValues(bottom = 60.dp, top = 4.dp, start = 8.dp, end = 8.dp)) {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(3.dp), contentPadding = PaddingValues(bottom = 60.dp, top = 4.dp, start = 8.dp, end = 8.dp)) {
                 items(list, key = { it.key }) { c ->
                     FocusCard(
                         onClick = { Play.channel(ctx, c, list) },
@@ -239,12 +251,12 @@ fun LiveScreen() {
                         onMenu = { ChannelMenu.open(c, inFavourites = selected == FAV) },
                         modifier = Modifier.fillMaxWidth(), scaleOnFocus = 1.02f, shape = RoundedCornerShape(10.dp),
                     ) { _ ->
-                        Row(Modifier.padding(horizontal = 14.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Box(Modifier.size(width = 72.dp, height = 40.dp), contentAlignment = Alignment.Center) {
+                        Row(Modifier.padding(horizontal = 12.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.size(width = 52.dp, height = 28.dp), contentAlignment = Alignment.Center) {
                                 AsyncImage(model = c.logo, contentDescription = null, modifier = Modifier.fillMaxSize())
                             }
-                            Spacer(Modifier.width(14.dp))
-                            Text(c.name, color = C.Text, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                            Spacer(Modifier.width(10.dp))
+                            Text(c.name, color = C.Text, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                             if (c.key in favs) Text("★", color = C.Gold, fontSize = 18.sp)
                         }
                     }
