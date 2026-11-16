@@ -54,6 +54,21 @@ object Standings {
         } catch (e: Exception) { cache[base.id]?.second ?: emptyList() }
     }
 
+    /** Tables already downloaded (no network), or empty. */
+    fun cached(leagueId: String): List<StandGroup> {
+        val base = Leagues.byId(leagueId)?.baseId ?: leagueId
+        return cache[base]?.second ?: emptyList()
+    }
+
+    /** A team's position in its table (division/conference/league as ESPN groups it), from downloaded tables. */
+    fun rankOf(leagueId: String, teamId: String): Int? {
+        for (g in cached(leagueId)) {
+            val i = g.rows.indexOfFirst { it.teamId == teamId }
+            if (i >= 0) return i + 1
+        }
+        return null
+    }
+
     private fun row(e: JsonObject): StandRow? {
         val t = e["team"].obj() ?: return null
         val stats = e["stats"].arr()?.mapNotNull { it.obj() }?.associate { (it.s("name") ?: it.s("type") ?: "") to it } ?: emptyMap()

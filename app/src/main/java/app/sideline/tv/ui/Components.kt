@@ -147,11 +147,12 @@ fun GameCard(
     val left = C.hex(away?.color).copy(alpha = 0.55f)
     val right = C.hex(home?.color).copy(alpha = 0.55f)
     // Compact = about half the height, for Home's My Teams row and the Sports tab.
-    val w = if (compact) 236.dp else 300.dp
-    val h = if (compact) 80.dp else 150.dp
-    FocusCard(onClick = onClick, onMenu = onMenu, modifier = modifier.width(w).height(h)) { _ ->
-        Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(listOf(left, C.Surface, C.Surface, right))))
-        Column(Modifier.fillMaxSize().padding(horizontal = if (compact) 10.dp else 14.dp, vertical = if (compact) 6.dp else 14.dp)) {
+    // Compact cards size to their content (no fixed height), so nothing is ever cut off.
+    val w = if (compact) 250.dp else 300.dp
+    val sized = if (compact) modifier.width(w) else modifier.width(w).height(150.dp)
+    FocusCard(onClick = onClick, onMenu = onMenu, modifier = sized) { _ ->
+        Box(Modifier.matchParentSize().background(Brush.horizontalGradient(listOf(left, C.Surface, C.Surface, right))))
+        Column((if (compact) Modifier.fillMaxWidth() else Modifier.fillMaxSize()).padding(horizontal = if (compact) 10.dp else 14.dp, vertical = if (compact) 8.dp else 14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 val tag = Leagues.byId(game.leagueId)?.tag
                 if (compact && tag != null) {

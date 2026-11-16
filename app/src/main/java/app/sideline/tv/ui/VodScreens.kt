@@ -283,6 +283,7 @@ fun SeriesScreen() {
     VodBrowser(
         "series", "No series yet", cats, series,
         catOf = { "${it.accountId}:${it.categoryId}" }, nameOf = { it.name }, keyOf = { "${it.accountId}:${it.seriesId}" }, continueItems = cont,
+        featured = if (app.sideline.tv.data.Tmdb.configured) ({ FeaturedSeries(series) { open = it } }) else null,
     ) { s -> SeriesTile(s, onClick = { open = s }) }
     open?.let { SeriesSheet(it) { open = null } }
 }
@@ -409,6 +410,44 @@ private fun FeaturedMovies(movies: List<Movie>, onOpen: (Movie) -> Unit) {
                         items(row.items, key = { it.t.tmdbId }) { i ->
                             val m = i.movie ?: return@items
                             PosterCard(m.name, m.poster ?: i.t.poster, onClick = { onOpen(m) },
+                                badge = i.t.score?.takeIf { it > 0 }?.let { "★ %.1f".format(it) })
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Trending/popular TV shows (TMDB) that are in your series library, as rows. */
+@Composable
+private fun FeaturedSeries(series: List<Series>, onOpen: (Series) -> Unit) {
+    val raw by app.sideline.tv.data.Discover.raw.collectAsState()
+    val status by app.sideline.tv.data.Discover.status.collectAsState()
+    val movies by SidelineApp.repo.movies.collectAsState()
+    LaunchedEffect(Unit) { app.sideline.tv.data.Discover.load() }
+    val rows by produceState<List<app.sideline.tv.data.Discover.Row>?>(null, raw, movies, series) {
+        value = withContext(Dispatchers.Default) {
+            val tvLists = raw.map { (name, titles) -> name to titles.filter { it.isTv } }.filter { it.second.isNotEmpty() }
+            app.sideline.tv.data.Discover.rows(tvLists, app.sideline.tv.data.Discover.indexFor(movies, series), onlyPlayable = true)
+        }
+    }
+    val r = rows
+    when {
+        r == null -> Text("Matching what's trending with your series…", color = C.Muted, modifier = Modifier.padding(16.dp))
+        r.isEmpty() -> Text(
+            if (raw.isEmpty() && status.isNotBlank() && !status.startsWith("Updating")) status
+            else if (raw.isEmpty()) "Loading what's trending…" else "None of this week's trending shows are in your library yet.",
+            color = C.Muted, modifier = Modifier.padding(16.dp),
+        )
+        else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(start = 8.dp, top = 4.dp, bottom = 60.dp)) {
+            items(r, key = { it.title }) { row ->
+                Column {
+                    Text(row.title, color = C.Text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 6.dp))
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(end = 24.dp, top = 4.dp, bottom = 4.dp)) {
+                        items(row.items, key = { it.t.tmdbId }) { i ->
+                            val sr = i.series ?: return@items
+                            PosterCard(sr.name, sr.cover ?: i.t.poster, onClick = { onOpen(sr) },
                                 badge = i.t.score?.takeIf { it > 0 }?.let { "★ %.1f".format(it) })
                         }
                     }

@@ -81,6 +81,10 @@ data class Competitor(
     val color: String?,
     val score: String,
     val home: Boolean,
+    /** Season record, e.g. "10-4-2", when the scoreboard has it. */
+    val record: String = "",
+    /** College poll rank (Top 25) when ranked. */
+    val pollRank: Int? = null,
 )
 
 data class Game(
@@ -102,6 +106,7 @@ data class Game(
     val prevHomeWinPct: Double? = null,
     val soccer: SoccerInfo? = null,
     val hockey: HockeyInfo? = null,
+    val venue: String = "",
 ) {
     val isLive get() = state == "in"
     val isFinal get() = state == "post"

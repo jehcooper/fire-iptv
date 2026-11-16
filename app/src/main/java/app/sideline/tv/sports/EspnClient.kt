@@ -123,6 +123,10 @@ object EspnClient {
                 color = team?.s("color"),
                 score = score,
                 home = cp.s("homeAway") == "home",
+                record = cp["records"].arr()?.mapNotNull { it.obj() }?.let { rs ->
+                    (rs.firstOrNull { it.s("type") == "total" || it.s("name") == "overall" } ?: rs.firstOrNull())?.s("summary")
+                } ?: "",
+                pollRank = cp["curatedRank"].obj()?.s("current")?.toIntOrNull()?.takeIf { it in 1..25 },
             )
         }
         val (state, detail, _) = status(c, ev)
@@ -158,6 +162,9 @@ object EspnClient {
             homeWinPct = c["situation"].obj()?.get("lastPlay").obj()?.get("probability").obj()?.s("homeWinPercentage")?.toDoubleOrNull()
                 ?: c["situation"].obj()?.get("probability").obj()?.s("homeWinPercentage")?.toDoubleOrNull(),
             soccer = if (league.path.startsWith("soccer")) parseSoccer(c) else null,
+            venue = c["venue"].obj()?.let { v ->
+                listOfNotNull(v.s("fullName"), v["address"].obj()?.s("city")).joinToString(", ")
+            } ?: "",
         )
     }
 
