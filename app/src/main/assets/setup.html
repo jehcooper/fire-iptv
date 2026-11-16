@@ -1,0 +1,205 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cooper TV setup</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:-apple-system,Segoe UI,Roboto,sans-serif;background:#0b0f14;color:#e8eef3}
+header{position:sticky;top:0;background:#0b0f14;z-index:5;padding:14px 16px 0;border-bottom:1px solid #1d2731}
+h1{font-size:22px;margin:0}h1 span{color:#22d3ee;font-weight:300}
+nav{display:flex;gap:6px;overflow-x:auto;padding:10px 0;scrollbar-width:none}
+nav button{flex:none;background:#131a22;color:#e8eef3;border:0;border-radius:999px;padding:9px 14px;font-size:14px}
+nav button.on{background:#2ee59d;color:#0b0f14;font-weight:700}
+main{max-width:720px;margin:0 auto;padding:14px 16px 120px}
+.card{background:#131a22;border-radius:14px;padding:14px;margin:12px 0}
+h2{font-size:18px;margin:4px 0 8px}h3{font-size:15px;margin:10px 0 6px;color:#22d3ee}
+p,.hint{color:#8fa3b5;font-size:13px;line-height:1.45;margin:4px 0}
+label{display:block;font-size:13px;color:#8fa3b5;margin:8px 0 3px}
+input[type=text],input[type=password],input[type=url],input[type=search],select{width:100%;background:#0b0f14;color:#e8eef3;border:1px solid #2a3642;border-radius:10px;padding:10px;font-size:15px}
+.row{display:flex;gap:8px;align-items:center}
+.row>*{flex:1}
+.chk{display:flex;align-items:center;gap:8px;padding:7px 0;font-size:15px;color:#e8eef3}
+.chk input{width:20px;height:20px;flex:none}
+.btn{background:#2ee59d;color:#0b0f14;font-weight:700;border:0;border-radius:999px;padding:11px 20px;font-size:15px;cursor:pointer}
+.btn.sec{background:#1d2731;color:#e8eef3}.btn.warn{background:#ff4d5e;color:#fff}.btn.small{padding:6px 12px;font-size:13px}
+.savebar{position:fixed;left:0;right:0;bottom:0;background:#0b0f14ee;border-top:1px solid #1d2731;padding:12px 16px;display:flex;gap:10px;align-items:center;justify-content:center}
+#msg{color:#ffc94d;font-size:14px}
+.ch{display:flex;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid #1d2731}
+.ch input[type=text]{padding:7px;font-size:14px}
+.ch .cat{font-size:11px;color:#8fa3b5}
+.star{background:none;border:0;font-size:22px;color:#4b5a68;width:34px}.star.on{color:#ffc94d}
+.pill{display:inline-block;font-size:11px;background:#1d2731;border-radius:6px;padding:2px 6px;color:#8fa3b5;margin-left:6px}
+.teams{max-height:320px;overflow:auto;border:1px solid #1d2731;border-radius:10px;padding:4px 10px;margin-top:6px}
+.hide{display:none}
+</style></head><body>
+<header><h1>COOPER <span>TV</span> <span style="font-size:14px;color:#8fa3b5">setup</span></h1>
+<nav id="tabs"></nav></header>
+<main id="main"><p>Loading your settings from the TV…</p></main>
+<div class="savebar"><button class="btn" id="save">Save this page</button><span id="msg"></span></div>
+<script>
+let S=null, tab='accounts';
+const TABS=[['accounts','IPTV accounts'],['sports','Sports'],['channels','Channels'],['categories','Categories'],['keys','Keys'],['guide','TV guide'],['display','Display'],['backup','Backup']];
+const $=s=>document.querySelector(s);
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function msg(t){$('#msg').textContent=t}
+async function load(){
+  try{const r=await fetch('api/state',{cache:'no-store'});if(!r.ok)throw 0;S=await r.json();
+    S.ch={names:{},hidden:new Set(),favs:S.channels.favOrder.slice()};
+    S.channels.list.forEach(c=>{if(c.n)S.ch.names[c.k]=c.n;if(c.h)S.ch.hidden.add(c.k)});
+    S.sp={leagues:new Set(S.sports.favLeagues),opts:new Set(S.sports.leagueOpts),confs:new Set(S.sports.favConfs),teams:new Set(S.sports.favTeams)};
+    S.catHidden=new Set(S.categories.hidden);
+    render()}
+  catch(e){$('#main').innerHTML='<div class="card"><h2>Can\'t reach the TV</h2><p>Make sure the “Set up from phone” screen is still open on the TV and that this phone is on the same Wi-Fi, then reload this page.</p></div>'}
+}
+function render(){
+  $('#tabs').innerHTML=TABS.map(([k,n])=>`<button class="${k==tab?'on':''}" onclick="go('${k}')">${n}</button>`).join('');
+  $('#save').classList.toggle('hide',tab=='backup');msg('');
+  ({accounts:rAccounts,sports:rSports,channels:rChannels,categories:rCats,keys:rKeys,guide:rGuide,display:rDisplay,backup:rBackup})[tab]();
+}
+function go(k){tab=k;render();window.scrollTo(0,0)}
+
+/* ---------- Accounts ---------- */
+function rAccounts(){
+  $('#main').innerHTML=`<p>Your Xtream Codes logins. “Live TV” and “Movies & series” choose what each account is used for.</p>`+
+  S.accounts.map((a,i)=>`<div class="card"><div class="row"><h2>${esc(a.name||'Account '+(i+1))}</h2><button class="btn warn small" style="flex:none" onclick="delAcc(${i})">Delete</button></div>
+   <label>Name</label><input type="text" data-a="${i}" data-f="name" value="${esc(a.name)}">
+   <label>Server address (e.g. http://example.com:8080)</label><input type="url" data-a="${i}" data-f="server" value="${esc(a.server)}" autocapitalize="off">
+   <div class="row"><div><label>Username</label><input type="text" data-a="${i}" data-f="username" value="${esc(a.username)}" autocapitalize="off" autocomplete="off"></div>
+   <div><label>Password</label><input type="text" data-a="${i}" data-f="password" value="${esc(a.password)}" autocapitalize="off" autocomplete="off"></div></div>
+   <label class="chk"><input type="checkbox" data-a="${i}" data-f="useLive" ${a.useLive!==false?'checked':''}> Use for Live TV</label>
+   <label class="chk"><input type="checkbox" data-a="${i}" data-f="useVod" ${a.useVod!==false?'checked':''}> Use for Movies & series</label>
+   <label>Live stream format</label><select data-a="${i}" data-f="liveFormat"><option value="ts" ${a.liveFormat!='m3u8'?'selected':''}>TS (usual)</option><option value="m3u8" ${a.liveFormat=='m3u8'?'selected':''}>HLS (m3u8)</option></select>
+  </div>`).join('')+`<button class="btn sec" onclick="addAcc()">+ Add an account</button>
+  <p class="hint">Saving reloads your channels and movies on the TV.</p>`;
+  document.querySelectorAll('[data-a]').forEach(el=>el.addEventListener(el.type=='checkbox'||el.tagName=='SELECT'?'change':'input',()=>{
+    const a=S.accounts[+el.dataset.a];a[el.dataset.f]=el.type=='checkbox'?el.checked:el.value}));
+}
+function addAcc(){S.accounts.push({id:'',name:'IPTV',server:'',username:'',password:'',useLive:true,useVod:true,liveFormat:'ts'});render()}
+function delAcc(i){if(confirm('Delete this account? (It is removed when you press Save.)')){S.accounts.splice(i,1);render()}}
+
+/* ---------- Sports ---------- */
+function rSports(){
+  const sp=S.sp, groups={};
+  S.sports.leagues.forEach(l=>(groups[l.group]=groups[l.group]||[]).push(l));
+  let h=`<p>Tick the leagues you want on the Sports tab, then pick options and favourite teams for each.</p>`;
+  for(const g in groups){h+=`<div class="card"><h2>${esc(g)}</h2>`+groups[g].map(l=>{
+    const on=sp.leagues.has(l.id);
+    let x=`<label class="chk"><input type="checkbox" onchange="tgl(S.sp.leagues,'${l.id}',this.checked);render()" ${on?'checked':''}> <b>${esc(l.name)}</b></label>`;
+    if(on&&l.team){
+      x+=`<div style="padding-left:28px">`+[['standings','Table on Home'],['live','Its live games on Home'],['popups','Score pop-ups for all its games']].map(([o,n])=>
+        `<label class="chk"><input type="checkbox" onchange="tgl(S.sp.opts,'${l.id}|${o}',this.checked)" ${sp.opts.has(l.id+'|'+o)?'checked':''}> ${n}</label>`).join('');
+      if(l.id=='ncaaf') x+=`<h3>Conferences (each gets its own tab)</h3>`+S.sports.conferences.map(c=>
+        `<label class="chk"><input type="checkbox" onchange="tgl(S.sp.confs,'${esc(c.id)}',this.checked)" ${sp.confs.has(c.id)?'checked':''}> ${esc(c.name)}</label>`).join('');
+      const teams=S.sports.teams[l.id];
+      x+=`<h3>Favourite teams</h3>`;
+      if(!teams||!teams.length) x+=`<p>Team list is still loading on the TV. <button class="btn sec small" onclick="refresh()">Refresh</button></p>`;
+      else x+=`<input type="search" placeholder="Search teams" oninput="filt(this)"><div class="teams">`+teams.map(t=>
+        `<label class="chk" data-n="${esc(t.name.toLowerCase())}"><input type="checkbox" onchange="tgl(S.sp.teams,'${l.id}|${esc(t.id)}',this.checked)" ${sp.teams.has(l.id+'|'+t.id)?'checked':''}> ${esc(t.name)}</label>`).join('')+`</div>`;
+      x+=`</div>`}
+    return x}).join('')+`</div>`}
+  $('#main').innerHTML=h;
+}
+function tgl(set,v,on){on?set.add(v):set.delete(v)}
+function filt(inp){const q=inp.value.toLowerCase();inp.nextElementSibling.querySelectorAll('[data-n]').forEach(e=>e.classList.toggle('hide',!e.dataset.n.includes(q)))}
+async function refresh(){const keep={tab};msg('Refreshing…');const old=S;await load();if(!S)S=old;tab=keep.tab;render()}
+
+/* ---------- Channels ---------- */
+let chQ='',chView='all',chCat='',chLimit=150;
+function rChannels(){
+  const cats=[...new Set(S.channels.list.map(c=>c.c).filter(Boolean))].sort();
+  $('#main').innerHTML=`<p>Rename (leave blank for the provider's name), hide, and ★ favourite channels. Reorder favourites under “Favourites”.</p>
+  <input type="search" id="q" placeholder="Search ${S.channels.list.length} channels" value="${esc(chQ)}">
+  <div class="row" style="margin-top:8px"><select id="view"><option value="all">All channels</option><option value="fav">Favourites (in order)</option><option value="hidden">Hidden</option><option value="renamed">Renamed</option></select>
+  <select id="cat"><option value="">All categories</option>${cats.map(c=>`<option ${c==chCat?'selected':''}>${esc(c)}</option>`).join('')}</select></div>
+  <div id="list"></div>`;
+  $('#view').value=chView;
+  $('#q').oninput=e=>{chQ=e.target.value;chLimit=150;drawList()};
+  $('#view').onchange=e=>{chView=e.target.value;drawList()};
+  $('#cat').onchange=e=>{chCat=e.target.value;chLimit=150;drawList()};
+  drawList();
+}
+function drawList(){
+  const ch=S.ch, by={};S.channels.list.forEach(c=>by[c.k]=c);
+  let list;
+  if(chView=='fav') list=ch.favs.map(k=>by[k]).filter(Boolean);
+  else{const q=chQ.toLowerCase();list=S.channels.list.filter(c=>(!chCat||c.c==chCat)&&(!q||(c.o+' '+(ch.names[c.k]||'')).toLowerCase().includes(q))&&
+    (chView=='all'||(chView=='hidden'&&ch.hidden.has(c.k))||(chView=='renamed'&&ch.names[c.k])))}
+  const shown=list.slice(0,chLimit);
+  $('#list').innerHTML=shown.map((c,i)=>`<div class="ch">
+    <button class="star ${ch.favs.includes(c.k)?'on':''}" onclick="fav('${esc(c.k)}')">★</button>
+    <div style="flex:1;min-width:0"><input type="text" value="${esc(ch.names[c.k]||'')}" placeholder="${esc(c.o)}" onchange="ren('${esc(c.k)}',this.value)">
+      <div class="cat">${esc(c.o)}${c.c?' · '+esc(c.c):''}</div></div>
+    ${chView=='fav'?`<button class="btn sec small" style="flex:none" onclick="mv('${esc(c.k)}',-1)">▲</button><button class="btn sec small" style="flex:none" onclick="mv('${esc(c.k)}',1)">▼</button>`:''}
+    <label class="chk" style="flex:none;font-size:13px"><input type="checkbox" ${ch.hidden.has(c.k)?'checked':''} onchange="tgl(S.ch.hidden,'${esc(c.k)}',this.checked)"> Hide</label>
+  </div>`).join('')+(list.length>chLimit?`<p><button class="btn sec" onclick="chLimit+=300;drawList()">Show more (${list.length-chLimit} left)</button></p>`:'')+
+  (list.length?'':'<p>No channels match.</p>');
+}
+function fav(k){const f=S.ch.favs;const i=f.indexOf(k);i<0?f.push(k):f.splice(i,1);drawList()}
+function ren(k,v){v=v.trim();v?S.ch.names[k]=v:delete S.ch.names[k]}
+function mv(k,d){const f=S.ch.favs,i=f.indexOf(k),j=i+d;if(i<0||j<0||j>=f.length)return;[f[i],f[j]]=[f[j],f[i]];drawList()}
+
+/* ---------- Categories ---------- */
+function rCats(){
+  const sec=(k,n)=>`<div class="card"><h2>${n}</h2>`+(S.categories[k].length?S.categories[k].map(c=>
+    `<label class="chk"><input type="checkbox" ${S.catHidden.has(c.k)?'':'checked'} onchange="tgl(S.catHidden,'${esc(c.k)}',!this.checked)"> ${esc(c.n)}</label>`).join(''):'<p>None loaded yet.</p>')+`</div>`;
+  $('#main').innerHTML=`<p>Untick a category to hide it on the TV.</p>`+sec('live','Live TV')+sec('vod','Movies')+sec('series','Series');
+}
+
+/* ---------- Keys ---------- */
+function rKeys(){
+  const k=S.keys;
+  $('#main').innerHTML=`<div class="card"><h2>TMDB</h2><p>For Discover and Featured rows. Free at themoviedb.org → Settings → API. Paste the API Key or the Read Access Token.</p>
+   <input type="text" id="tmdb" value="${esc(k.tmdb)}" autocapitalize="off"></div>
+  <div class="card"><h2>OMDb</h2><p>For IMDb ratings. Free key at omdbapi.com.</p><input type="text" id="omdb" value="${esc(k.omdb)}" autocapitalize="off"></div>
+  <div class="card"><h2>OpenSubtitles</h2><p>For subtitles on movies and series (opensubtitles.com account + API key).</p>
+   <label>API key</label><input type="text" id="osKey" value="${esc(k.osKey)}" autocapitalize="off">
+   <div class="row"><div><label>Username</label><input type="text" id="osUser" value="${esc(k.osUser)}" autocapitalize="off"></div>
+   <div><label>Password</label><input type="text" id="osPass" value="${esc(k.osPass)}" autocapitalize="off"></div></div></div>`;
+}
+
+/* ---------- Guide ---------- */
+function rGuide(){
+  const g=S.guide;
+  $('#main').innerHTML=`<div class="card"><h2>TV guide source</h2>
+   <label class="chk"><input type="radio" name="gs" value="full" ${g.source=='full'?'checked':''}> Full guide from your provider (recommended)</label>
+   <label class="chk"><input type="radio" name="gs" value="basic" ${g.source=='basic'?'checked':''}> Basic: just now & next from your provider</label>
+   <label class="chk"><input type="radio" name="gs" value="custom" ${g.source=='custom'?'checked':''}> My own XMLTV guide address</label>
+   <label>XMLTV address (only for “My own”)</label><input type="url" id="gurl" value="${esc(g.url)}" autocapitalize="off"></div>`;
+}
+
+/* ---------- Display ---------- */
+function rDisplay(){
+  const d=S.display;
+  $('#main').innerHTML=`<div class="card"><h2>Player panels</h2><label>See-through: <b id="ptv">${d.panelTransparency}%</b> (0% = solid)</label>
+   <input type="range" id="pt" min="0" max="100" step="5" value="${d.panelTransparency}" style="width:100%" oninput="$('#ptv').textContent=this.value+'%'"></div>
+  <div class="card"><h2>Sports</h2>
+   <label class="chk"><input type="checkbox" id="spoil" ${d.spoilerFree?'checked':''}> Spoiler-free (hide scores)</label>
+   <label class="chk"><input type="checkbox" id="auto" ${d.autoFollowTeams?'checked':''}> Score pop-ups for my favourite teams automatically</label></div>
+  <div class="card"><h2>Subtitles</h2>
+   <label class="chk"><input type="checkbox" id="subs" ${d.subsOn?'checked':''}> Subtitles on by default for movies & series</label>
+   <label>Language code (e.g. en, fr, hi)</label><input type="text" id="lang" value="${esc(d.subsLang)}" autocapitalize="off"></div>`;
+}
+
+/* ---------- Backup ---------- */
+function rBackup(){$('#main').innerHTML=`<div class="card"><h2>Backup & restore</h2><p>Download everything you've set up as one file, or restore one.</p><a class="btn" href="backup" style="text-decoration:none;display:inline-block">Open backup page</a></div>`}
+
+/* ---------- Save ---------- */
+function collect(){
+  switch(tab){
+    case 'accounts': return {list:S.accounts};
+    case 'sports': return {favLeagues:[...S.sp.leagues],leagueOpts:[...S.sp.opts],favConfs:[...S.sp.confs],favTeams:[...S.sp.teams]};
+    case 'channels': return {names:S.ch.names,hidden:[...S.ch.hidden],favs:S.ch.favs};
+    case 'categories': return {hidden:[...S.catHidden]};
+    case 'keys': return {tmdb:$('#tmdb').value.trim(),omdb:$('#omdb').value.trim(),osKey:$('#osKey').value.trim(),osUser:$('#osUser').value.trim(),osPass:$('#osPass').value};
+    case 'guide': return {source:(document.querySelector('[name=gs]:checked')||{}).value||'full',url:$('#gurl').value.trim()};
+    case 'display': {const d={panelTransparency:+$('#pt').value,spoilerFree:$('#spoil').checked,autoFollowTeams:$('#auto').checked,subsOn:$('#subs').checked,subsLang:$('#lang').value.trim()};S.display=d;return d}
+  }
+}
+$('#save').onclick=async()=>{
+  if(tab=='accounts'&&S.accounts.some(a=>!a.server||!a.username)){msg('Each account needs a server and username.');return}
+  if(tab=='keys'){S.keys=collect()}
+  if(tab=='guide'){S.guide=collect()}
+  msg('Saving…');
+  try{const r=await fetch('api/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({section:tab,data:collect()})});
+    msg(await r.text())}catch(e){msg('Couldn\'t reach the TV. Is the setup screen still open?')}
+};
+load();
+</script></body></html>

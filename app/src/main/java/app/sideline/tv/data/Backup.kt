@@ -114,7 +114,11 @@ object Backup {
             .firstOrNull { it.isSiteLocalAddress }?.hostAddress
     } catch (e: Exception) { null }
 
-    fun start(ctx: Context): String? {
+    /** True when started from "Set up from phone": the address opens the setup page instead of backup. */
+    @Volatile private var setupMode = false
+
+    fun start(ctx: Context, setup: Boolean = false): String? {
+        setupMode = setup
         stop()
         val ip = localIp() ?: run { _status.value = "The stick doesn't seem to be on a network."; return null }
         val pin = (1000..9999).random().toString()
@@ -122,7 +126,7 @@ object Backup {
         server = ss
         val app = ctx.applicationContext
         address = "http://$ip:${ss.localPort}/$pin/"
-        _status.value = "Waiting for your phone or computer…"
+        _status.value = "Waiting for your phone…"
         thread(name = "backup-server", isDaemon = true) {
             while (!ss.isClosed) {
                 val s = try { ss.accept() } catch (e: Exception) { break }
@@ -154,8 +158,32 @@ object Backup {
         val out = s.getOutputStream()
         if (!path.startsWith("/$pin/")) { respond(out, 404, "text/plain", "Not found".toByteArray()); return }
         val sub = path.removePrefix("/$pin/")
+        fun body(): String? {
+            val len = headers["content-length"]?.toIntOrNull() ?: 0
+            if (len <= 0 || len > 20 * 1024 * 1024) return null
+            val b = ByteArray(len); var read = 0
+            while (read < len) { val n = input.read(b, read, len - read); if (n < 0) break; read += n }
+            return String(b, 0, read, Charsets.UTF_8)
+        }
         when {
-            method == "GET" && (sub == "" || sub == "index.html") -> respond(out, 200, "text/html; charset=utf-8", PAGE.toByteArray())
+            method == "GET" && (sub == "" || sub == "index.html") ->
+                if (setupMode) respond(out, 200, "text/html; charset=utf-8", ctx.assets.open("setup.html").use { it.readBytes() })
+                else respond(out, 200, "text/html; charset=utf-8", PAGE.toByteArray())
+            method == "GET" && sub == "backup" -> respond(out, 200, "text/html; charset=utf-8", PAGE.toByteArray())
+            method == "GET" && sub == "api/state" -> {
+                _status.value = "Phone connected."
+                respond(out, 200, "application/json; charset=utf-8", PhoneSetup.state().toByteArray())
+            }
+            method == "POST" && sub == "api/save" -> {
+                val text = body() ?: run { respond(out, 400, "text/plain", "Nothing received".toByteArray()); return }
+                try {
+                    val msg = PhoneSetup.save(text)
+                    _status.value = "Saved from your phone: " + (Regex("\"section\"\\s*:\\s*\"(\\w+)\"").find(text)?.groupValues?.get(1) ?: "settings")
+                    respond(out, 200, "text/plain; charset=utf-8", msg.toByteArray())
+                } catch (e: Exception) {
+                    respond(out, 400, "text/plain; charset=utf-8", (e.message ?: "Couldn't save").toByteArray())
+                }
+            }
             method == "GET" && sub.startsWith("cooper-tv-backup") -> {
                 _status.value = "Backup downloaded."
                 val name = "cooper-tv-backup-" + java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date()) + ".json"

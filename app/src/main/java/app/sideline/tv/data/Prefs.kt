@@ -226,6 +226,32 @@ class Prefs(context: Context) {
         }
     }
 
+    // ---- Bulk setters, used by the phone setup page ----
+    private fun putSet(flow: MutableStateFlow<Set<String>>, key: String, v: Set<String>) {
+        flow.value = v; sp.edit().putStringSet(key, v).apply()
+    }
+    fun setFavLeagues(v: Set<String>) = putSet(_favLeagues, "favLeagues", v)
+    fun setLeagueOpts(v: Set<String>) = putSet(_leagueOpts, "leagueOpts", v)
+    fun setFavConferences(v: Set<String>) = putSet(_favConfs, "favConfs", v)
+    fun setFavTeams(v: Set<String>) = putSet(_favTeams, "favTeams", v)
+    fun setHiddenCats(v: Set<String>) = putSet(_hiddenCats, "hiddenCats", v)
+    /** Renames, hidden channels and favourites (in order) in one go; refreshes the channel list once. */
+    fun setChannelEdits(names: Map<String, String>, hidden: Set<String>, favsInOrder: List<String>) {
+        val m = names.filterValues { it.isNotBlank() }.mapValues { it.value.trim() }
+        _channelNames.value = m
+        sp.edit().putString("channelNames", json.encodeToString(kotlinx.serialization.builtins.MapSerializer(
+            String.serializer(), String.serializer()), m)).apply()
+        putSet(_hiddenChannels, "hiddenChannels", hidden)
+        putSet(_favChannels, "favChannels", favsInOrder.toSet())
+        saveFavOrder(favsInOrder.distinct())
+        onChannelEdit?.invoke()
+    }
+    /** Replaces the whole account list. */
+    fun setAccounts(list: List<Account>) {
+        _accounts.value = list
+        sp.edit().putString("accounts", json.encodeToString(ListSerializer(Account.serializer()), list)).apply()
+    }
+
     companion object {
         val DEFAULT_LEAGUES = setOf("nhl", "nfl", "nba", "mlb", "epl")
     }

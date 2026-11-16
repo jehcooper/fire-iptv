@@ -80,6 +80,7 @@ fun SettingsScreen() {
     var editOmdb by remember { mutableStateOf(false) }
     var editGuideUrl by remember { mutableStateOf(false) }
     var backupOpen by remember { mutableStateOf(false) }
+    var phoneOpen by remember { mutableStateOf(false) }
     var speedTest by remember { mutableStateOf(false) }
     var leagueOptsFor by remember { mutableStateOf<String?>(null) }
     val omdbKey by prefs.omdbKey.collectAsState()
@@ -90,6 +91,15 @@ fun SettingsScreen() {
         contentPadding = PaddingValues(start = 48.dp, end = 48.dp, top = 16.dp, bottom = 80.dp),
         verticalArrangement = Arrangement.spacedBy(26.dp),
     ) {
+        item {
+            Column {
+                SectionTitle("Set up from your phone")
+                Text("Scan a QR code and change everything here (accounts, sports, channels, categories, keys, guide, display) " +
+                    "with your phone's keyboard.", color = C.Muted, fontSize = 14.sp)
+                Spacer(Modifier.height(8.dp))
+                Chip("📱 Set up from phone", false, onClick = { phoneOpen = true })
+            }
+        }
         item {
             Column {
                 SectionTitle("IPTV accounts")
@@ -331,6 +341,7 @@ fun SettingsScreen() {
         "TMDB API key or Read Access Token", prefs.tmdbKey.value, { prefs.setTmdbKey(it) },
     ) { editTmdb = false }
     if (backupOpen) BackupDialog { backupOpen = false }
+    if (phoneOpen) BackupDialog(setup = true) { phoneOpen = false }
     if (speedTest) SpeedTestDialog { speedTest = false }
     leagueOptsFor?.let { LeagueOptionsDialog(it) { leagueOptsFor = null } }
     if (editGuideUrl) KeyEditor(
@@ -632,20 +643,20 @@ private fun HiddenChannels(onDone: () -> Unit) {
 
 /** Shows the web address to open on a phone/computer; the little web server runs only while this is open. */
 @Composable
-private fun BackupDialog(onDone: () -> Unit) {
+private fun BackupDialog(setup: Boolean = false, onDone: () -> Unit) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val status by app.sideline.tv.data.Backup.status.collectAsState()
     var address by remember { mutableStateOf<String?>(null) }
     val close = remember { FocusRequester() }
     androidx.compose.runtime.DisposableEffect(Unit) {
-        address = app.sideline.tv.data.Backup.start(ctx)
+        address = app.sideline.tv.data.Backup.start(ctx, setup)
         onDispose { app.sideline.tv.data.Backup.stop() }
     }
     LaunchedEffect(Unit) { delay(200); try { close.requestFocus() } catch (_: Exception) {} }
     TvDialog(onDone) {
         Box(Modifier.fillMaxSize().background(C.Bg.copy(alpha = 0.97f)), contentAlignment = Alignment.Center) {
             Column(Modifier.width(760.dp).clip(RoundedCornerShape(18.dp)).background(C.Surface).padding(32.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Backup & restore", color = C.Text, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                Text(if (setup) "Set up from your phone" else "Backup & restore", color = C.Text, fontSize = 24.sp, fontWeight = FontWeight.Bold)
                 val a = address
                 if (a == null) {
                     Text(status.ifBlank { "Couldn't start the backup page." }, color = C.Live, fontSize = 15.sp)
@@ -661,7 +672,9 @@ private fun BackupDialog(onDone: () -> Unit) {
                             Text(a, color = C.Accent, fontSize = 26.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 4.dp))
                         }
                     }
-                    Text("There you can download a backup file, or upload one to restore (which restarts Cooper TV). " +
+                    Text(if (setup) "Each page there has its own Save button; changes show on the TV straight away. " +
+                        "The page only works while this screen is open, and shows your logins, so only open it on your own phone."
+                        else "There you can download a backup file, or upload one to restore (which restarts Cooper TV). " +
                         "The page only works while this screen is open.", color = C.Muted, fontSize = 14.sp)
                     if (status.isNotBlank()) Text(status, color = C.Gold, fontSize = 15.sp)
                 }
