@@ -150,6 +150,11 @@ class PlayerActivity : ComponentActivity() {
     private var infoJob: Job? = null
     private var toastJob: Job? = null
     private var stallJob: Job? = null
+    /** Automatic reconnects of the current live channel (reset once it has played smoothly for 30 s). */
+    private var retries = 0
+    private var onBackup = false
+    private var reconnectJob: Job? = null
+    private var steadyJob: Job? = null
     private var epgJob: Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -191,6 +196,12 @@ class PlayerActivity : ComponentActivity() {
                     recoverWithoutSubtitles()
                     return
                 }
+                // HLS fell too far behind the live point (e.g. after a long pause): jump back to live.
+                if (live && !catchUp && error.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW) {
+                    player.seekToDefaultPosition(); player.prepare(); player.playWhenReady = true
+                    flash("Back to live")
+                    return
+                }
                 val detail = (error.cause?.message ?: error.message ?: "").take(80)
                 handleFailure(error.errorCodeName.removePrefix("ERROR_CODE_").lowercase().replace('_', ' ') +
                     if (detail.isNotBlank()) ": $detail" else "")
@@ -207,9 +218,11 @@ class PlayerActivity : ComponentActivity() {
                 updateAwake()
                 stallJob?.cancel()
                 if (state == Player.STATE_BUFFERING && live && !catchUp) {
-                    // A live stream stuck buffering this long is treated as dead → try a backup copy.
-                    stallJob = lifecycleScope.launch { delay(15_000); handleFailure("stalled") }
+                    // A live stream stuck buffering this long is treated as dropped → reconnect.
+                    stallJob = lifecycleScope.launch { delay(12_000); handleFailure("stalled") }
                 }
+                steadyJob?.cancel()
+                if (state == Player.STATE_READY && live) steadyJob = lifecycleScope.launch { delay(30_000); retries = 0 }
                 if (state == Player.STATE_ENDED && live && !catchUp) handleFailure("ended")
             }
         })
@@ -412,6 +425,9 @@ class PlayerActivity : ComponentActivity() {
             tried.clear()
             if (current != null && current?.key != c.key) previous = current
         }
+        reconnectJob?.cancel()
+        retries = 0
+        onBackup = failover
         catchUp = false
         live = true
         current = c
@@ -428,15 +444,35 @@ class PlayerActivity : ComponentActivity() {
 
     private fun handleFailure(why: String) {
         stallJob?.cancel()
+        steadyJob?.cancel()
         val c = current
         if (live && !catchUp && c != null) {
-            val backup = repo.backupsFor(c).firstOrNull { it.key !in tried }
-            if (backup != null) {
-                flash("Stream dropped. Switching to backup: ${backup.name}")
-                tune(backup, failover = true)
+            // 1) Reconnect the same channel, waiting a bit longer each time. The waits matter with a
+            //    1-connection subscription: the provider needs a moment to let go of the dropped connection.
+            val waits = if (onBackup) listOf(2, 4) else listOf(1, 2, 4, 6, 8)
+            if (retries < waits.size) {
+                val wait = waits[retries]
+                retries++
+                flash("Reconnecting… (try $retries of ${waits.size})")
+                player.stop()
+                reconnectJob?.cancel()
+                reconnectJob = lifecycleScope.launch {
+                    delay(wait * 1000L)
+                    val client = repo.client(c.accountId) ?: return@launch
+                    if (current?.key == c.key) start(client.liveUrl(c))
+                }
                 return
             }
-            flash("This channel isn't working right now ($why). Try another.")
+            // 2) Another copy of the channel: same channel number first (e.g. the SD version), then same name.
+            val backup = repo.backupsFor(c).firstOrNull { it.key !in tried }
+            if (backup != null) {
+                flash("Stream dropped. Switching to: ${backup.name}")
+                player.stop()
+                reconnectJob?.cancel()
+                reconnectJob = lifecycleScope.launch { delay(1500); tune(backup, failover = true) }
+                return
+            }
+            flash("This channel isn't working right now ($why). Press OK on it again or try another.")
         } else {
             flash("Couldn't play this ($why).")
         }

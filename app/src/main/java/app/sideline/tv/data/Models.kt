@@ -140,3 +140,29 @@ fun normalizeChannelName(name: String): String {
     n = n.replace(Regex("[^a-z0-9]+"), " ")
     return n.trim().replace(Regex("\\s+"), " ")
 }
+
+private val RX_SLOT_PREFIX = Regex("^[a-z]{2,3}\\s*[|:\\-]\\s*")
+private val RX_SLOT_BRACKETS = Regex("[\\[(].*?[\\])]")
+private val RX_SLOT_QUALITY = Regex("\\b(uhd|fhd|hd|sd|4k|8k|hevc|h265|h264|1080p?|720p?|50fps|60fps|raw|backup|vip|plus)\\b")
+private val RX_SLOT = Regex("^([a-z][a-z0-9 &+.']*?)\\s*(?:#|no\\.?|ch\\.?|channel)?\\s*0*(\\d{1,3})(?!\\d)(.*)$")
+private val RX_SLOT_SEP = Regex("\\s*[:|]|\\s-\\s|\\s–\\s")
+private val RX_SLOT_GAME = Regex("\\b(vs?|at)\\b|@")
+
+/**
+ * "Same channel number" key, so "NHL 05 FHD: Leafs vs Bruins" and "NHL 05 SD" count as the same feed.
+ * Text after a separator (":", "|", " - ") or that names a game ("vs", "@") is ignored; other text stays,
+ * so "FOX 5 New York" and "FOX 5 Atlanta" stay different. Null when the name has no number.
+ */
+fun channelSlot(name: String): String? {
+    var n = name.lowercase().trim()
+    n = n.replace(RX_SLOT_PREFIX, "").replace(RX_SLOT_BRACKETS, " ").replace(RX_SLOT_QUALITY, " ")
+        .replace(Regex("\\s+"), " ").trim()
+    val m = RX_SLOT.find(n) ?: return null
+    val base = m.groupValues[1].replace(Regex("[^a-z0-9]+"), " ").trim()
+    if (base.isEmpty()) return null
+    var tail = m.groupValues[3]
+    RX_SLOT_SEP.find(tail)?.let { tail = tail.substring(0, it.range.first) }
+    if (RX_SLOT_GAME.containsMatchIn(tail)) tail = ""
+    tail = tail.replace(Regex("[^a-z0-9]+"), " ").trim()
+    return "$base#${m.groupValues[2].toInt()}" + if (tail.isNotEmpty()) "#$tail" else ""
+}

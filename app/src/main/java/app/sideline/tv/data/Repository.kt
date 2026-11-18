@@ -39,7 +39,9 @@ class Repository(private val prefs: Prefs) {
     val errors: StateFlow<List<String>> = _errors
 
     /** Channels grouped by normalised name, for auto-failover. */
-    private var twins: Map<String, List<Channel>> = emptyMap()
+    @Volatile private var twins: Map<String, List<Channel>> = emptyMap()
+    /** Channels grouped by account + "same channel number" (see [channelSlot]). */
+    @Volatile private var slots: Map<String, List<Channel>> = emptyMap()
 
     /** Pre-computed lowercase and normalised channel names, so game matching doesn't redo regex work. */
     @Volatile var lowerNames: Map<String, String> = emptyMap(); private set
@@ -74,6 +76,8 @@ class Repository(private val prefs: Prefs) {
         byKey = visible.associateBy { it.key }
         byEpg = visible.filter { !it.epgId.isNullOrBlank() }.groupBy { it.epgId!!.lowercase() }
         twins = visible.groupBy { norm[it.key] ?: "" }
+        slots = visible.mapNotNull { c -> channelSlot(c.baseName)?.let { "${c.accountId}|$it" to c } }
+            .groupBy({ it.first }, { it.second })
         channels.value = visible
     }
 
@@ -204,8 +208,11 @@ class Repository(private val prefs: Prefs) {
         channels.value.filter { it.accountId == cat.accountId && it.categoryId == cat.id }
 
     /** Other copies of the same channel (e.g. HD / FHD versions) to fall back to if one dies. */
-    fun backupsFor(c: Channel): List<Channel> =
-        twins[normalizeChannelName(c.baseName)].orEmpty().filter { it.key != c.key }
+    fun backupsFor(c: Channel): List<Channel> {
+        // Same channel number first (e.g. the SD copy of "NHL 05 FHD: Leafs vs Bruins"), then same name.
+        val slot = channelSlot(c.baseName)?.let { slots["${c.accountId}|$it"] }.orEmpty()
+        return (slot + twins[normalizeChannelName(c.baseName)].orEmpty()).distinctBy { it.key }.filter { it.key != c.key }
+    }
 
     fun categoryName(c: Channel): String =
         liveCategories.value.firstOrNull { it.accountId == c.accountId && it.id == c.categoryId }?.name ?: ""
