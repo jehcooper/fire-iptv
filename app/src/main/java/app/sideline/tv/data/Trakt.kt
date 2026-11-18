@@ -186,13 +186,18 @@ object Trakt {
                 call("GET", "/sync/watched/movies").arr()?.mapNotNull { it.obj()?.get("movie").obj()?.get("ids").obj()?.s("tmdb") }
                     ?.let { _watchedMovies.value = it.toSet() }
                 call("GET", "/sync/watched/shows").arr()?.mapNotNull { it.obj() }?.let { shows ->
-                    _watchedEps.value = shows.mapNotNull { sh ->
-                        val id = sh["show"].obj()?.get("ids").obj()?.s("tmdb") ?: return@mapNotNull null
-                        id to (sh["seasons"].arr()?.flatMap { se ->
-                            val n = se.obj()?.s("number") ?: return@flatMap emptyList()
-                            se.obj()?.get("episodes").arr()?.mapNotNull { ep -> ep.obj()?.s("number")?.let { "$n:$it" } } ?: emptyList()
-                        }?.toSet() ?: emptySet())
-                    }.toMap()
+                    val map = HashMap<String, Set<String>>()
+                    for (sh in shows) {
+                        val id = sh["show"].obj()?.get("ids").obj()?.s("tmdb") ?: continue
+                        val eps = HashSet<String>()
+                        sh["seasons"].arr()?.forEach { se ->
+                            val so = se.obj() ?: return@forEach
+                            val n = so.s("number") ?: return@forEach
+                            so["episodes"].arr()?.forEach { ep -> ep.obj()?.s("number")?.let { eps.add("$n:$it") } }
+                        }
+                        map[id] = eps
+                    }
+                    _watchedEps.value = map
                 }
                 refreshRatings()
             } catch (_: Exception) {}
