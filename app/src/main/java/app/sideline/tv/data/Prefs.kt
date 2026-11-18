@@ -226,6 +226,43 @@ class Prefs(context: Context) {
         }
     }
 
+    // ---- Trakt ----
+    private val _traktClientId = str("traktClientId", "")
+    val traktClientId: StateFlow<String> = _traktClientId
+    private val _traktSecret = str("traktSecret", "")
+    val traktSecret: StateFlow<String> = _traktSecret
+    fun setTraktApp(id: String, secret: String) {
+        _traktClientId.value = id.trim(); _traktSecret.value = secret.trim()
+        sp.edit().putString("traktClientId", id.trim()).putString("traktSecret", secret.trim()).apply()
+    }
+    private val _traktToken = str("traktToken", "")
+    /** Access token ("" = not signed in). */
+    val traktToken: StateFlow<String> = _traktToken
+    val traktRefresh: String get() = sp.getString("traktRefresh", "") ?: ""
+    val traktExpires: Long get() = sp.getLong("traktExpires", 0L)
+    private val _traktUser = str("traktUser", "")
+    val traktUser: StateFlow<String> = _traktUser
+    fun setTraktLogin(token: String, refresh: String, expiresAt: Long, user: String) {
+        _traktToken.value = token; _traktUser.value = user
+        sp.edit().putString("traktToken", token).putString("traktRefresh", refresh).putLong("traktExpires", expiresAt)
+            .putString("traktUser", user).apply()
+    }
+    /** Titles you chose to sync with Trakt: "movie:<tmdbId>" or "show:<tmdbId>". */
+    private val _traktSync = MutableStateFlow(sp.getStringSet("traktSync", emptySet())!!.toSet())
+    val traktSync: StateFlow<Set<String>> = _traktSync
+    fun toggleTraktSync(key: String) = toggle(_traktSync, "traktSync", key)
+
+    /** Your library items matched to TMDB: "movie:<acc:id>" / "series:<acc:id>" → TMDB id. */
+    private val _tmdbIds = MutableStateFlow(loadMap("tmdbIds"))
+    val tmdbIds: StateFlow<Map<String, String>> = _tmdbIds
+    fun rememberTmdbId(libraryKey: String, tmdbId: String) {
+        if (_tmdbIds.value[libraryKey] == tmdbId) return
+        val m = _tmdbIds.value + (libraryKey to tmdbId)
+        _tmdbIds.value = m
+        sp.edit().putString("tmdbIds", json.encodeToString(kotlinx.serialization.builtins.MapSerializer(
+            String.serializer(), String.serializer()), m)).apply()
+    }
+
     // ---- Bulk setters, used by the phone setup page ----
     private fun putSet(flow: MutableStateFlow<Set<String>>, key: String, v: Set<String>) {
         flow.value = v; sp.edit().putStringSet(key, v).apply()

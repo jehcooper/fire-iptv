@@ -209,6 +209,7 @@ class PlayerActivity : ComponentActivity() {
             override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
                 paused = !playWhenReady
                 updateAwake()
+                if (!live && player.playbackState == Player.STATE_READY) traktScrobble(if (playWhenReady) "start" else "pause")
             }
             override fun onTracksChanged(tracks: Tracks) {
                 // First time a movie/episode's tracks are known: apply the subtitles-on/off preference.
@@ -223,6 +224,8 @@ class PlayerActivity : ComponentActivity() {
                 }
                 steadyJob?.cancel()
                 if (state == Player.STATE_READY && live) steadyJob = lifecycleScope.launch { delay(30_000); retries = 0 }
+                if (state == Player.STATE_READY && !live && !traktStarted && player.playWhenReady) traktScrobble("start")
+                if (state == Player.STATE_ENDED && !live) traktScrobble("stop")
                 if (state == Player.STATE_ENDED && live && !catchUp) handleFailure("ended")
             }
         })
@@ -679,7 +682,21 @@ class PlayerActivity : ComponentActivity() {
         wakeLock?.let { if (it.isHeld) it.release() }
         if (!::player.isInitialized) return
         saveResume()
+        traktScrobble(if (traktFraction() >= 0.8f) "stop" else "pause")
         player.pause()
+    }
+
+    // ---------- Trakt (only for titles you chose to sync) ----------
+    private var traktStarted = false
+    private fun traktFraction(): Float {
+        val d = player.duration
+        return if (d > 0) (player.currentPosition.toFloat() / d).coerceIn(0f, 1f) else 0f
+    }
+    private fun traktScrobble(action: String) {
+        val v = vodItem ?: return
+        if (live) return
+        if (action == "start") traktStarted = true else if (!traktStarted) return
+        app.sideline.tv.data.Trakt.scrobble(action, v, traktFraction())
     }
 
     private fun saveResume() {
@@ -1141,7 +1158,7 @@ class PlayerActivity : ComponentActivity() {
     private fun PauseOverlay() {
         AnimatedVisibility(visible = paused && !live, enter = fadeIn(), exit = fadeOut()) {
             val d = details
-            Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(listOf(Color(0xF20B0F14), Color(0xD90B0F14), Color(0x800B0F14))))) {
+            Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(listOf(Color(0xF22A2C47), Color(0xD92A2C47), Color(0x802A2C47))))) {
                 Row(Modifier.fillMaxSize().padding(start = 64.dp, end = 64.dp, top = 56.dp, bottom = 40.dp)) {
                     if (d?.poster != null) {
                         AsyncImage(model = d.poster, contentDescription = null, contentScale = ContentScale.Crop,

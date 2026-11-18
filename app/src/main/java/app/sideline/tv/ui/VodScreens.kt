@@ -179,7 +179,7 @@ fun ProgressCard(p: ProgressEntry, onClick: () -> Unit, modifier: Modifier = Mod
         Confirm.ask("Remove \"${p.title}\" from Continue watching?", yes = "Remove", destructive = true) { SidelineApp.progress.remove(p.key) }
     }, modifier = modifier.width(240.dp).height(150.dp)) { f ->
         AsyncImage(model = p.image, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xF00B0F14)))))
+        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xF02A2C47)))))
         Column(Modifier.align(Alignment.BottomStart).padding(10.dp)) {
             Text(p.title, color = C.Text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (p.subtitle.isNotBlank()) Text(p.subtitle, color = C.Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -220,6 +220,11 @@ private fun DetailSheet(image: String?, onDismiss: () -> Unit, content: @Composa
 
 @Composable
 fun MovieSheet(m: Movie, onDismiss: () -> Unit) {
+    // With TMDB set up, movies open the full title page (cast, trailer, more like this, Trakt).
+    if (app.sideline.tv.data.Tmdb.configured) {
+        LaunchedEffect(m.key) { Pages.movie(m); onDismiss() }
+        return
+    }
     val ctx = LocalContext.current
     var info by remember { mutableStateOf<MovieInfo?>(null) }
     val play = remember { FocusRequester() }
@@ -290,6 +295,10 @@ fun SeriesScreen() {
 
 @Composable
 fun SeriesSheet(s: Series, onDismiss: () -> Unit) {
+    if (app.sideline.tv.data.Tmdb.configured) {
+        LaunchedEffect(s.seriesId, s.accountId) { Pages.series(s); onDismiss() }
+        return
+    }
     val ctx = LocalContext.current
     var episodes by remember { mutableStateOf<List<Episode>?>(null) }
     var season by remember { mutableStateOf(1) }

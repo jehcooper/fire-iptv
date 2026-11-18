@@ -29,7 +29,7 @@ object Net {
                     .bootstrapDnsHosts(java.net.InetAddress.getByName("8.8.8.8"), java.net.InetAddress.getByName("8.8.4.4")).build(),
             )
         }
-        private fun special(host: String) = host.endsWith("tmdb.org") || host.endsWith("themoviedb.org")
+        private fun special(host: String) = host.endsWith("tmdb.org") || host.endsWith("themoviedb.org") || host.endsWith("trakt.tv")
         override fun lookup(hostname: String): List<java.net.InetAddress> {
             if (special(hostname)) {
                 for (r in resolvers) {

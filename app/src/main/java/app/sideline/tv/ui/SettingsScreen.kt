@@ -77,6 +77,9 @@ fun SettingsScreen() {
     var editOs by remember { mutableStateOf(false) }
     var manageCats by remember { mutableStateOf<String?>(null) }
     var editTmdb by remember { mutableStateOf(false) }
+    var editTraktId by remember { mutableStateOf(false) }
+    var editTraktSecret by remember { mutableStateOf(false) }
+    var traktLogin by remember { mutableStateOf(false) }
     var editOmdb by remember { mutableStateOf(false) }
     var editGuideUrl by remember { mutableStateOf(false) }
     var backupOpen by remember { mutableStateOf(false) }
@@ -251,6 +254,33 @@ fun SettingsScreen() {
 
         item {
             Column {
+                SectionTitle("Trakt")
+                val token by prefs.traktToken.collectAsState()
+                val user by prefs.traktUser.collectAsState()
+                val cid by prefs.traktClientId.collectAsState()
+                val secret by prefs.traktSecret.collectAsState()
+                Text("Keep track of what you watch on trakt.tv. Only titles you switch \"Sync to Trakt\" on (on each movie or series page) are synced: " +
+                    "watching now, watched episodes/movies (from about 80% through), and your ratings. Episodes you watched elsewhere show ✓ here.",
+                    color = C.Muted, fontSize = 14.sp)
+                Text("One-time setup: on a computer or phone, sign in at trakt.tv → Settings → Your API Apps → New application. Name: Cooper TV. " +
+                    "Redirect URI: urn:ietf:wg:oauth:2.0:oob. Save, then copy the Client ID and Client Secret here (easiest with \"Set up from phone\").",
+                    color = C.Faint, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp))
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Chip(if (cid.isBlank()) "Add Client ID" else "Client ID ✓", false, onClick = { editTraktId = true })
+                    Chip(if (secret.isBlank()) "Add Client Secret" else "Client Secret ✓", false, onClick = { editTraktSecret = true })
+                    if (token.isBlank()) Chip("Connect Trakt", cid.isNotBlank() && secret.isNotBlank(), onClick = { traktLogin = true })
+                    else Chip("Disconnect ${user.ifBlank { "Trakt" }}", false, onClick = {
+                        Confirm.ask("Disconnect Trakt?", "Nothing is deleted on Trakt; Cooper TV just stops syncing.", "Disconnect", destructive = true) { app.sideline.tv.data.Trakt.signOut() }
+                    })
+                }
+                if (token.isNotBlank()) Text("Connected" + (if (user.isNotBlank()) " as $user" else "") + " · ${prefs.traktSync.collectAsState().value.size} titles syncing",
+                    color = C.Accent, fontSize = 14.sp, modifier = Modifier.padding(top = 6.dp))
+            }
+        }
+
+        item {
+            Column {
                 SectionTitle("Subtitles (movies & series)")
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Chip(if (subsOn) "✓ Subtitles on" else "Subtitles off", subsOn, onClick = { prefs.setSubsOn(!subsOn) })
@@ -323,6 +353,7 @@ fun SettingsScreen() {
                     SidelineApp.repo.catchupAvailable -> "Yes. ${channels.count { it.hasArchive }} channels support catch-up (look for the CATCH-UP tag)"
                     else -> "No. Your live provider doesn't offer catch-up"
                 }
+                Text("Cooper TV build ${buildNumber(androidx.compose.ui.platform.LocalContext.current)}", color = C.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                 Text("Catch-up: $catchup", color = C.Muted, fontSize = 14.sp)
                 Text("Scores come from ESPN's public feed. It's unofficial and may change.", color = C.Faint, fontSize = 13.sp)
                 Spacer(Modifier.height(10.dp))
@@ -341,6 +372,11 @@ fun SettingsScreen() {
         "TMDB API key or Read Access Token", prefs.tmdbKey.value, { prefs.setTmdbKey(it) },
     ) { editTmdb = false }
     if (backupOpen) BackupDialog { backupOpen = false }
+    if (editTraktId) KeyEditor("Trakt Client ID", "From trakt.tv → Settings → Your API Apps → Cooper TV.", "Client ID",
+        prefs.traktClientId.value, { prefs.setTraktApp(it, prefs.traktSecret.value) }) { editTraktId = false }
+    if (editTraktSecret) KeyEditor("Trakt Client Secret", "From trakt.tv → Settings → Your API Apps → Cooper TV.", "Client Secret",
+        prefs.traktSecret.value, { prefs.setTraktApp(prefs.traktClientId.value, it) }) { editTraktSecret = false }
+    if (traktLogin) TraktLoginDialog { traktLogin = false }
     if (phoneOpen) BackupDialog(setup = true) { phoneOpen = false }
     if (speedTest) SpeedTestDialog { speedTest = false }
     leagueOptsFor?.let { LeagueOptionsDialog(it) { leagueOptsFor = null } }
@@ -785,6 +821,47 @@ private fun LeagueOptionsDialog(leagueId: String, onDone: () -> Unit) {
                     }
                 }
                 Chip("Done", false, onClick = onDone)
+            }
+        }
+    }
+}
+
+/** Trakt sign-in: shows a code to enter at trakt.tv/activate (QR opens the page), then waits. */
+@Composable
+private fun TraktLoginDialog(onDone: () -> Unit) {
+    var code by remember { mutableStateOf<app.sideline.tv.data.Trakt.DeviceCode?>(null) }
+    var result by remember { mutableStateOf<String?>(null) }
+    val status by app.sideline.tv.data.Trakt.status.collectAsState()
+    val close = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        val dc = app.sideline.tv.data.Trakt.startSignIn()
+        if (dc == null) { result = status.ifBlank { "Couldn't start sign-in. Check the Client ID." }; return@LaunchedEffect }
+        code = dc
+        result = if (app.sideline.tv.data.Trakt.waitForSignIn(dc)) "✓ Connected to Trakt. Now switch \"Sync to Trakt\" on for the titles you want."
+            else "The code expired or was refused. Try again."
+    }
+    LaunchedEffect(Unit) { delay(200); try { close.requestFocus() } catch (_: Exception) {} }
+    TvDialog(onDone) {
+        Box(Modifier.fillMaxSize().background(C.Bg.copy(alpha = 0.97f)), contentAlignment = Alignment.Center) {
+            Column(Modifier.width(760.dp).clip(RoundedCornerShape(18.dp)).background(C.Surface).padding(32.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Connect Trakt", color = C.Text, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                val c = code
+                when {
+                    result != null -> Text(result!!, color = if (result!!.startsWith("✓")) C.Accent else C.Gold, fontSize = 16.sp)
+                    c == null -> Text("Asking Trakt for a code…", color = C.Muted, fontSize = 15.sp)
+                    else -> Row(verticalAlignment = Alignment.CenterVertically) {
+                        QrCode(c.url, Modifier.size(160.dp))
+                        Spacer(Modifier.width(24.dp))
+                        Column {
+                            Text("On your phone, open", color = C.Muted, fontSize = 15.sp)
+                            Text(c.url.removePrefix("https://"), color = C.Text, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                            Text("and enter this code:", color = C.Muted, fontSize = 15.sp, modifier = Modifier.padding(top = 6.dp))
+                            Text(c.userCode, color = C.Text, fontSize = 40.sp, fontWeight = FontWeight.ExtraBold)
+                            Text("Waiting for you to approve…", color = C.Faint, fontSize = 13.sp)
+                        }
+                    }
+                }
+                Chip(if (result != null) "Done" else "Cancel", result != null, onClick = onDone, modifier = Modifier.focusRequester(close))
             }
         }
     }

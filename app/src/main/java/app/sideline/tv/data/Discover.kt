@@ -18,6 +18,7 @@ object Discover {
     data class Title(
         val tmdbId: String, val isTv: Boolean, val title: String, val year: String, val overview: String,
         val poster: String?, val backdrop: String?, val score: Double?,
+        val genreIds: List<String> = emptyList(), val popularity: Double = 0.0,
     )
 
     /** A TMDB title, plus the matching item in your library (if any). */
@@ -75,6 +76,7 @@ object Discover {
                                                 poster = img(o.s("poster_path"), "w342"),
                                                 backdrop = img(o.s("backdrop_path"), "w1280"),
                                                 score = o.s("vote_average")?.toDoubleOrNull(),
+                                                genreIds = o["genre_ids"].arr()?.mapNotNull { it.s() } ?: emptyList(),
                                             )
                                         } ?: emptyList()
                                 } catch (e: Exception) { emptyList() }

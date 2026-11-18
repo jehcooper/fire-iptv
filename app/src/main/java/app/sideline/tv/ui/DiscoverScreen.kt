@@ -71,13 +71,7 @@ fun DiscoverScreen(goTo: (Tab) -> Unit) {
         }
     }
 
-    fun open(i: Discover.Item) {
-        when {
-            i.movie != null -> openMovie = i.movie
-            i.series != null -> openSeries = i.series
-            else -> openInfo = i.t
-        }
-    }
+    fun open(i: Discover.Item) = Pages.open(Page.Title(i.t, i.movie, i.series))
 
     if (tmdbKey.isBlank() || !Tmdb.configured) {
         Column(Modifier.fillMaxSize().padding(48.dp)) {

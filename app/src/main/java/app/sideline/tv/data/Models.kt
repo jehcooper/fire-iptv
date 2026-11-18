@@ -123,6 +123,7 @@ data class EpgItem(
 
 fun JsonElement?.obj(): JsonObject? = this as? JsonObject
 fun JsonElement?.arr(): JsonArray? = this as? JsonArray
+fun JsonElement?.s(): String? = (this as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() && it != "null" }
 fun JsonObject.s(key: String): String? = (this[key] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() && it != "null" }
 fun JsonObject.i(key: String): Int? = s(key)?.let { it.toIntOrNull() ?: it.toDoubleOrNull()?.toInt() }
 fun JsonObject.l(key: String): Long? = s(key)?.let { it.toLongOrNull() ?: it.toDoubleOrNull()?.toLong() }

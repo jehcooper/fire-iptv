@@ -24,6 +24,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import app.sideline.tv.SidelineApp
@@ -88,9 +89,10 @@ fun HomeScreen(goTo: (Tab) -> Unit) {
     }
 
     LazyColumn(
-        contentPadding = PaddingValues(start = 48.dp, end = 48.dp, top = 16.dp, bottom = 60.dp),
+        contentPadding = PaddingValues(start = 48.dp, end = 48.dp, top = 4.dp, bottom = 60.dp),
         verticalArrangement = Arrangement.spacedBy(28.dp),
     ) {
+        if (app.sideline.tv.data.Tmdb.configured) item(key = "hero") { ForYouHero() }
         if (errors.isNotEmpty()) item { EmptyState("Some content didn't load", errors.joinToString("\n")) }
         val contMovies = progress.filter { it.kind == "movie" }
         val contSeries = progress.filter { it.kind == "episode" }
@@ -204,6 +206,74 @@ fun OnNowCard(c: app.sideline.tv.data.Channel, onClick: () -> Unit) {
                 }
                 Text("Ends ${timeOf(p.end * 1000)}" + (next?.let { "  ·  Next: ${it.title}" } ?: ""), color = C.Faint, fontSize = 11.sp,
                     maxLines = 1, modifier = Modifier.padding(top = 4.dp))
+            }
+        }
+    }
+}
+
+/**
+ * Big rotating banner at the top of Home: what's trending this week that you can watch, with the picture
+ * filling the screen behind. ◀ ▶ / the › button change title; it moves on by itself every 9 s while you're elsewhere.
+ */
+@Composable
+private fun ForYouHero() {
+    val ctx = LocalContext.current
+    val raw by app.sideline.tv.data.Discover.raw.collectAsState()
+    val index = rememberLibraryIndex()
+    LaunchedEffect(Unit) { app.sideline.tv.data.Discover.load(); app.sideline.tv.data.TmdbApi.genres() }
+    val picks = remember(raw, index) {
+        val lists = raw.filter { it.first.startsWith("Trending") || it.first.startsWith("New") }.map { it.second }
+        val all = lists.flatten().filter { it.backdrop != null }.distinctBy { (if (it.isTv) "t" else "m") + it.tmdbId }
+        val playable = if (index == null) emptyList() else all.filter { t -> if (t.isTv) index.series(t) != null else index.movie(t) != null }
+        (playable.ifEmpty { all }).take(8)
+    }
+    if (picks.isEmpty()) return
+    var i by remember { mutableStateOf(0) }
+    var focused by remember { mutableStateOf(false) }
+    val cur = picks[i % picks.size]
+    LaunchedEffect(cur.backdrop) { Backdrop.url.value = cur.backdrop }
+    androidx.compose.runtime.DisposableEffect(Unit) { onDispose { Backdrop.url.value = null } }
+    LaunchedEffect(focused, picks.size) {
+        while (!focused) { kotlinx.coroutines.delay(9000); i = (i + 1) % picks.size }
+    }
+    val m = if (!cur.isTv) index?.movie(cur) else null
+    val sr = if (cur.isTv) index?.series(cur) else null
+    Column(
+        Modifier.fillMaxWidth().height(330.dp).padding(top = 30.dp),
+        verticalArrangement = Arrangement.Bottom,
+    ) {
+        Text("For you", color = C.Text, fontSize = 13.sp, fontWeight = FontWeight.Bold,
+            modifier = Modifier.background(C.Glass, androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
+                .padding(horizontal = 10.dp, vertical = 4.dp))
+        Text(cur.title, color = C.Text, fontSize = 42.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.padding(top = 10.dp))
+        val meta = listOfNotNull(
+            app.sideline.tv.data.TmdbApi.genreNames(cur).take(2).joinToString(", ").takeIf { it.isNotBlank() },
+            cur.year.takeIf { it.isNotBlank() },
+            cur.score?.let { "★ %.1f".format(it) },
+            if (cur.isTv) "Series" else "Movie",
+        )
+        Text(meta.joinToString("  ·  "), color = C.Text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 4.dp))
+        Text(cur.overview, color = C.Text, fontSize = 15.sp, lineHeight = 21.sp, maxLines = 3,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.padding(top = 8.dp).width(660.dp))
+        androidx.compose.foundation.layout.Row(
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.padding(top = 14.dp)
+                .onFocusChanged { focused = it.hasFocus },
+        ) {
+            if (m != null) Chip("▶  Play", true, onClick = { Play.movie(ctx, m) })
+            Chip("ⓘ  More info", m == null, onClick = { Pages.open(Page.Title(cur, m, sr)) })
+            Chip("›", false, onClick = { i = (i + 1) % picks.size })
+            androidx.compose.foundation.layout.Spacer(Modifier.width(18.dp))
+            androidx.compose.foundation.layout.Row(
+                Modifier.background(C.Glass, androidx.compose.foundation.shape.RoundedCornerShape(50)).padding(horizontal = 10.dp, vertical = 7.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                picks.indices.forEach { k ->
+                    androidx.compose.foundation.layout.Box(Modifier.size(if (k == i % picks.size) 9.dp else 7.dp)
+                        .background(if (k == i % picks.size) C.Text else C.Faint, androidx.compose.foundation.shape.CircleShape))
+                }
             }
         }
     }

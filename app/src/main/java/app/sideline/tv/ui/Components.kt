@@ -199,6 +199,7 @@ fun GameCard(
 fun PosterCard(
     title: String, image: String?, onClick: () -> Unit, modifier: Modifier = Modifier,
     wide: Boolean = false, badge: String? = null, onFocus: (() -> Unit)? = null, onMenu: (() -> Unit)? = null,
+    badgeColor: Color = C.Accent, badgeTextColor: Color = C.OnAccent,
 ) {
     val w = if (wide) 220.dp else 150.dp
     val h = if (wide) 124.dp else 225.dp
@@ -211,13 +212,13 @@ fun PosterCard(
         )
         Box(
             Modifier.fillMaxWidth().align(Alignment.BottomCenter)
-                .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xEE0B0F14))))
+                .background(Brush.verticalGradient(listOf(Color.Transparent, C.Bg.copy(alpha = 0.93f))))
                 .padding(10.dp),
         ) {
             Text(title, color = C.Text, fontSize = 13.sp, maxLines = if (focused) 3 else 2, overflow = TextOverflow.Ellipsis,
                 fontWeight = if (focused) FontWeight.SemiBold else FontWeight.Normal)
         }
-        if (badge != null) Box(Modifier.align(Alignment.TopEnd).padding(8.dp)) { Pill(badge, C.Accent) }
+        if (badge != null) Box(Modifier.align(Alignment.TopEnd).padding(8.dp)) { Pill(badge, badgeColor, badgeTextColor) }
     }
 }
 
@@ -385,7 +386,7 @@ fun SearchDialog(
     }
     fun done() { keyboard?.hide(); onSearch(text.text.trim()) }
     TvDialog(onDismiss) {
-        Box(Modifier.fillMaxSize().background(Color(0xD90B0F14)), contentAlignment = Alignment.TopCenter) {
+        Box(Modifier.fillMaxSize().background(Color(0xD92A2C47)), contentAlignment = Alignment.TopCenter) {
             Column(Modifier.padding(top = 60.dp).width(720.dp).clip(RoundedCornerShape(18.dp)).background(C.Surface).padding(28.dp)) {
                 Text(title, color = C.Text, fontSize = 22.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(12.dp))

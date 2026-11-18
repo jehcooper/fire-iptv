@@ -44,6 +44,7 @@ object PhoneSetup {
             putJsonObject("keys") {
                 put("tmdb", prefs.tmdbKey.value); put("omdb", prefs.omdbKey.value)
                 put("osKey", prefs.osKey.value); put("osUser", prefs.osUser.value); put("osPass", prefs.osPass.value)
+                put("traktId", prefs.traktClientId.value); put("traktSecret", prefs.traktSecret.value)
             }
             putJsonObject("guide") { put("source", prefs.guideSource.value); put("url", prefs.guideUrl.value) }
             putJsonObject("display") {
@@ -116,6 +117,7 @@ object PhoneSetup {
             "keys" -> {
                 prefs.setTmdbKey(d.str("tmdb")); prefs.setOmdbKey(d.str("omdb"))
                 prefs.setOpenSubtitles(d.str("osKey"), d.str("osUser"), d.str("osPass"))
+                prefs.setTraktApp(d.str("traktId"), d.str("traktSecret"))
             }
             "guide" -> {
                 prefs.setGuideSource(d.str("source").ifBlank { "full" }); prefs.setGuideUrl(d.str("url"))

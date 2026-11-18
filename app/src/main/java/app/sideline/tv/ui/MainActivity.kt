@@ -29,9 +29,41 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.focusGroup
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Explore
+import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.LiveTv
+import androidx.compose.material.icons.rounded.Movie
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.SportsHockey
+import androidx.compose.material.icons.rounded.Tv
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import app.sideline.tv.SidelineApp
 
-enum class Tab(val label: String) { Home("Home"), Discover("Discover"), Sports("Sports"), Live("Live TV"), Movies("Movies"), Series("Series"), Settings("Settings") }
+enum class Tab(val label: String, val icon: ImageVector) {
+    Home("Home", Icons.Rounded.Home), Search("Search", Icons.Rounded.Search), Discover("Discover", Icons.Rounded.Explore),
+    Sports("Sports", Icons.Rounded.SportsHockey), Live("Live TV", Icons.Rounded.LiveTv), Movies("Movies", Icons.Rounded.Movie),
+    Series("Series", Icons.Rounded.Tv), Settings("Settings", Icons.Rounded.Settings),
+}
+
+/** Full-screen picture behind everything (Home's "For you" banner sets it). */
+object Backdrop { val url = mutableStateOf<String?>(null) }
+
+/** This app's build number (the one in "Cooper TV build N"). */
+@Suppress("DEPRECATION")
+fun buildNumber(ctx: android.content.Context): Int = try {
+    ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionCode
+} catch (e: Exception) { 0 }
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -49,36 +81,39 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 private fun Root() {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
     val accounts by SidelineApp.prefs.accounts.collectAsState()
     var tab by rememberSaveable { mutableStateOf(if (accounts.isEmpty()) Tab.Settings else Tab.Home) }
     val loading by SidelineApp.repo.loading.collectAsState()
+    val build = androidx.compose.runtime.remember { buildNumber(ctx) }
+    val backdrop by Backdrop.url
 
     BackHandler(enabled = tab != Tab.Home) { tab = Tab.Home }
 
     Box(Modifier.fillMaxSize().background(C.Bg)) {
-        Column(Modifier.fillMaxSize()) {
+        // Big background picture (Home banner), fading into the background colour.
+        androidx.compose.animation.Crossfade(backdrop, label = "backdrop") { url ->
+            if (url != null) Box(Modifier.fillMaxSize()) {
+                coil.compose.AsyncImage(model = url, contentDescription = null, contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize())
+                Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0f to Color.Transparent, 0.45f to C.Bg.copy(alpha = 0.35f), 0.75f to C.Bg.copy(alpha = 0.92f), 1f to C.Bg)))
+                Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(0f to C.Bg.copy(alpha = 0.75f), 0.5f to C.Bg.copy(alpha = 0.25f), 1f to Color.Transparent)))
+            }
+        }
+        Column(Modifier.fillMaxSize().padding(start = 60.dp)) {
             Row(
-                Modifier.fillMaxWidth().padding(start = 48.dp, end = 48.dp, top = 24.dp, bottom = 8.dp),
+                Modifier.fillMaxWidth().padding(start = 48.dp, end = 40.dp, top = 14.dp, bottom = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                androidx.compose.foundation.Image(
-                    painter = androidx.compose.ui.res.painterResource(app.sideline.tv.R.drawable.logo_wordmark),
-                    contentDescription = "Cooper TV",
-                    modifier = Modifier.height(30.dp),
-                )
-                Spacer(Modifier.width(24.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Tab.entries.forEach { t -> Chip(t.label, selected = t == tab, onClick = { tab = t }, compact = true) }
-                }
-                Spacer(Modifier.weight(1f))
-                if (loading) CircularProgressIndicator(color = C.Accent, strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
+                Box(Modifier.weight(1f)) { LoadingStrip() }
+                if (loading) CircularProgressIndicator(color = C.Accent, strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(12.dp))
                 Clock()
             }
-            LoadingStrip()
             Box(Modifier.fillMaxSize()) {
                 when (tab) {
                     Tab.Home -> HomeScreen(goTo = { tab = it })
+                    Tab.Search -> SearchScreen()
                     Tab.Discover -> DiscoverScreen(goTo = { tab = it })
                     Tab.Sports -> SportsScreen(goTo = { tab = it })
                     Tab.Live -> LiveScreen()
@@ -88,11 +123,89 @@ private fun Root() {
                 }
             }
         }
+        Sidebar(tab, onSelect = { tab = it }, build = build)
         ScorePopupHost()
         ReminderHost()
         ChannelMenuHost()
+        PagesHost()
         LoadingDialog()
         ConfirmHost()
+        UpdateBanner(build)
+    }
+}
+
+/** Left-hand menu of rounded pills: just icons until you move onto it, then it opens with names. */
+@OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
+@Composable
+private fun Sidebar(tab: Tab, onSelect: (Tab) -> Unit, build: Int) {
+    var expanded by androidx.compose.runtime.remember { mutableStateOf(false) }
+    val width by androidx.compose.animation.core.animateDpAsState(if (expanded) 250.dp else 84.dp, label = "sidebar")
+    val requesters = androidx.compose.runtime.remember { Tab.entries.associateWith { FocusRequester() } }
+    Box(
+        Modifier.fillMaxHeight().width(width)
+            .background(
+                if (expanded) Brush.horizontalGradient(0f to C.Bg.copy(alpha = 0.97f), 0.75f to C.Bg.copy(alpha = 0.88f), 1f to Color.Transparent)
+                else Brush.horizontalGradient(0f to C.Bg.copy(alpha = 0.55f), 1f to Color.Transparent),
+            )
+            .onFocusChanged { expanded = it.hasFocus }
+            .focusProperties { enter = { requesters[tab] ?: FocusRequester.Default } }
+            .focusGroup(),
+    ) {
+        Column(Modifier.fillMaxHeight().padding(start = 16.dp, top = 18.dp, bottom = 12.dp, end = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Box(Modifier.height(26.dp)) {
+                if (expanded) androidx.compose.foundation.Image(
+                    painter = androidx.compose.ui.res.painterResource(app.sideline.tv.R.drawable.logo_wordmark),
+                    contentDescription = "Cooper TV", modifier = Modifier.height(24.dp),
+                )
+            }
+            Tab.entries.forEach { t -> SideItem(t, t == tab, expanded, requesters.getValue(t)) { onSelect(t) } }
+            Spacer(Modifier.weight(1f))
+            Text(if (expanded) "Cooper TV · build $build" else "b$build", color = C.Faint, fontSize = 11.sp, maxLines = 1,
+                modifier = Modifier.padding(start = 6.dp))
+        }
+    }
+}
+
+@Composable
+private fun SideItem(t: Tab, selected: Boolean, expanded: Boolean, r: FocusRequester, onClick: () -> Unit) {
+    FocusCard(
+        onClick = onClick, shape = RoundedCornerShape(50), scaleOnFocus = 1.04f,
+        modifier = Modifier.focusRequester(r).height(46.dp).let { if (expanded) it.fillMaxWidth() else it.width(46.dp) },
+    ) { f ->
+        Box(Modifier.matchParentSize().background(when { selected -> C.Accent; f -> C.Surface2; else -> C.Glass }))
+        Row(
+            Modifier.fillMaxSize().padding(horizontal = if (expanded) 16.dp else 0.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = if (expanded) Arrangement.Start else Arrangement.Center,
+        ) {
+            androidx.compose.material3.Icon(t.icon, contentDescription = t.label, tint = if (selected) C.OnAccent else C.Text, modifier = Modifier.size(22.dp))
+            if (expanded) {
+                Spacer(Modifier.width(14.dp))
+                Text(t.label, color = if (selected) C.OnAccent else C.Text, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+            }
+        }
+    }
+}
+
+/** "Updated to build N" for a few seconds after an update (and the first time this version opens). */
+@Composable
+private fun UpdateBanner(build: Int) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    var show by androidx.compose.runtime.remember { mutableStateOf<String?>(null) }
+    androidx.compose.runtime.LaunchedEffect(build) {
+        val sp = ctx.getSharedPreferences("sideline", android.content.Context.MODE_PRIVATE)
+        val last = sp.getInt("lastBuild", 0)
+        if (build > 0 && build != last) {
+            sp.edit().putInt("lastBuild", build).apply()
+            show = if (last == 0) "Cooper TV build $build" else "Updated to build $build (was build $last)"
+            kotlinx.coroutines.delay(8000)
+            show = null
+        }
+    }
+    val text = show ?: return
+    Box(Modifier.fillMaxSize().padding(top = 18.dp), contentAlignment = Alignment.TopCenter) {
+        Text(text, color = C.OnAccent, fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.background(C.Accent, RoundedCornerShape(50)).padding(horizontal = 22.dp, vertical = 10.dp))
     }
 }
 
@@ -109,7 +222,7 @@ private fun LoadingStrip() {
         else -> null
     } ?: return
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = 48.dp).padding(bottom = 4.dp),
+        Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(text, color = C.Muted, fontSize = 13.sp, maxLines = 1)
@@ -168,5 +281,5 @@ private fun Clock() {
             kotlinx.coroutines.delay(60_000 - now % 60_000)
         }
     }
-    Text(timeOf(now), color = C.Muted, fontSize = 18.sp)
+    Text(timeOf(now), color = C.Text, fontSize = 18.sp, fontWeight = FontWeight.Medium)
 }

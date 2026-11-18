@@ -59,8 +59,19 @@ class WatchProgress(context: Context) {
         val rest = _entries.value.filter { it.key != e.key && !(e.kind == "episode" && it.kind == "episode" && it.seriesId == e.seriesId && it.accountId == e.accountId) }
         val finished = e.duration > 0 && e.position > e.duration - 5 * 60_000
         val barely = e.position < 60_000
+        if (finished) markDone(e.key)
         save(if (finished || barely) rest.filter { it.key != e.key } else (listOf(e) + rest).take(40))
     }
 
     fun remove(key: String) = save(_entries.value.filter { it.key != key })
+
+    private val _done = MutableStateFlow(sp.getStringSet("done", emptySet())!!.toSet())
+    /** Keys of movies/episodes you watched to the end (for ✓ marks). */
+    val done: StateFlow<Set<String>> = _done
+    private fun markDone(key: String) {
+        if (key in _done.value) return
+        val d = (_done.value + key).let { if (it.size > 3000) it.drop(it.size - 3000).toSet() else it }
+        _done.value = d
+        sp.edit().putStringSet("done", d).apply()
+    }
 }
