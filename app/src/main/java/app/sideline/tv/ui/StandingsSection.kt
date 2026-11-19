@@ -2,6 +2,7 @@ package app.sideline.tv.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -79,7 +80,7 @@ fun StandingsSection(games: List<Game>, favTeams: Set<String>, leagueOpts: Set<S
     if (cards.isEmpty()) return
     Column {
         SectionTitle("Standings · live")
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(vertical = 10.dp, horizontal = 6.dp)) {
             items(cards, key = { it.leagueId + it.name }) { g -> StandingsCard(g, favIds) }
         }
     }

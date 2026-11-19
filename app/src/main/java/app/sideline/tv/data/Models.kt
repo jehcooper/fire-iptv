@@ -167,3 +167,19 @@ fun channelSlot(name: String): String? {
     tail = tail.replace(Regex("[^a-z0-9]+"), " ").trim()
     return "$base#${m.groupValues[2].toInt()}" + if (tail.isNotEmpty()) "#$tail" else ""
 }
+
+private val RX_EVENT_SLOT = Regex(
+    "^(?:[a-z]{2,3}\\s*[|:\\-]\\s*)?(?:nhl|nfl|nba|mlb|mls|wnba|ncaa[fb]?|cfb|cbb|epl|ufc|pga|nascar|f1|espn\\s*\\+|espn plus|" +
+        "nfl sunday ticket|nhl cent(?:re|er) ice|nba league pass|mlb extra innings|mls season pass|ppv|live event|events?|sports? events?|" +
+        "dazn|peacock|paramount\\s*\\+|fubo|flo\\w*|b1g\\s*\\+|big ten\\s*\\+|sec\\s*\\+|acc\\s*(?:n|nx|extra)|tsn\\s*\\+|sn\\s*\\+)" +
+        "[^a-z0-9]*(?:#|no\\.?|ch\\.?)?\\s*\\d{1,3}\\b",
+    RegexOption.IGNORE_CASE,
+)
+private val RX_EVENT_GAME = Regex("\\s(?:vs?\\.?|at|@)\\s.*\\d{1,2}(?::\\d{2})?\\s?(?:am|pm)\\b|\\b\\d{1,2}(?::\\d{2})?\\s?(?:am|pm)\\s?(?:et|pt|ct|mt|est|pst|gmt|uk)\\b",
+    RegexOption.IGNORE_CASE)
+
+/**
+ * Channels that only exist for one game or event ("NHL 07: Oilers at Lightning 7:30PM ET", "ESPN+ 12", "NFL 03 SD").
+ * They're not kept in Recent, because once the game is over the channel shows something else.
+ */
+fun isEventChannel(name: String): Boolean = RX_EVENT_SLOT.containsMatchIn(name.trim()) || RX_EVENT_GAME.containsMatchIn(name)

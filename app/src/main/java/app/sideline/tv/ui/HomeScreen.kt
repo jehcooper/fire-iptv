@@ -72,7 +72,7 @@ fun HomeScreen(goTo: (Tab) -> Unit) {
             .sortedWith(compareBy({ !it.isLive }, { it.isFinal }, { it.startMillis }))
     }
     val liveNow = remember(allGames, mine) { allGames.filter { it.isLive && it !in mine }.take(15) }
-    val recentCh = remember(recent, channels) { recent.mapNotNull { repo.channel(it) } }
+    val recentCh = remember(recent, channels) { recent.mapNotNull { repo.channel(it) }.filterNot { app.sideline.tv.data.isEventChannel(it.baseName) } }
     val favOrder by prefs.favOrder.collectAsState()
     val favList = remember(favCh, favOrder, channels) { prefs.orderedFavs().mapNotNull { repo.channel(it) } }
     // Latest releases: newest release year first (then most recently added), when the provider gives years.
@@ -99,7 +99,7 @@ fun HomeScreen(goTo: (Tab) -> Unit) {
         if (contMovies.isNotEmpty()) item {
             Column {
                 SectionTitle("Continue watching · Movies")
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(vertical = 10.dp, horizontal = 6.dp)) {
                     items(contMovies.take(20), key = { it.key }) { p -> ProgressCard(p, onClick = { Play.resume(ctx, p) }) }
                 }
             }
@@ -107,7 +107,7 @@ fun HomeScreen(goTo: (Tab) -> Unit) {
         if (contSeries.isNotEmpty()) item {
             Column {
                 SectionTitle("Continue watching · Series")
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(vertical = 10.dp, horizontal = 6.dp)) {
                     items(contSeries.take(20), key = { it.key }) { p -> ProgressCard(p, onClick = { Play.resume(ctx, p) }) }
                 }
             }
@@ -115,7 +115,7 @@ fun HomeScreen(goTo: (Tab) -> Unit) {
         if (favList.isNotEmpty()) item {
             Column {
                 SectionTitle("On now · your favourites")
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(vertical = 10.dp, horizontal = 6.dp)) {
                     items(favList, key = { it.key }) { c -> OnNowCard(c, onClick = { Play.channel(ctx, c, favList) }) }
                 }
             }
@@ -123,7 +123,7 @@ fun HomeScreen(goTo: (Tab) -> Unit) {
         if (mine.isNotEmpty()) item {
             Column {
                 SectionTitle("My Teams & followed games")
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(vertical = 10.dp, horizontal = 6.dp)) {
                     items(mine, key = { it.id }) { g -> GameCard(g, g.id in followed, spoilerFree, onClick = { openGame = g }, compact = true) }
                 }
             }
@@ -132,7 +132,7 @@ fun HomeScreen(goTo: (Tab) -> Unit) {
         if (liveNow.isNotEmpty()) item {
             Column {
                 SectionTitle("Live in your leagues")
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(vertical = 10.dp, horizontal = 6.dp)) {
                     items(liveNow, key = { it.id }) { g -> GameCard(g, g.id in followed, spoilerFree, onClick = { openGame = g }, compact = true) }
                 }
             }
@@ -140,7 +140,7 @@ fun HomeScreen(goTo: (Tab) -> Unit) {
         if (recentCh.isNotEmpty()) item {
             Column {
                 SectionTitle("Recently watched")
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(vertical = 10.dp, horizontal = 6.dp)) {
                     items(recentCh, key = { it.key }) { c -> PosterCard(c.name, c.logo, wide = true, onClick = { Play.channel(ctx, c, recentCh) }) }
                 }
             }
@@ -148,7 +148,7 @@ fun HomeScreen(goTo: (Tab) -> Unit) {
         if (movies.isNotEmpty()) item {
             Column {
                 SectionTitle("Latest movie releases")
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(vertical = 10.dp, horizontal = 6.dp)) {
                     items(latestMovies, key = { it.key }) { m -> PosterCard(m.name, m.poster, onClick = { openMovie = m }) }
                 }
             }
@@ -156,7 +156,7 @@ fun HomeScreen(goTo: (Tab) -> Unit) {
         if (yourSeries.isNotEmpty()) item {
             Column {
                 SectionTitle("Your series")
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(vertical = 10.dp, horizontal = 6.dp)) {
                     items(yourSeries, key = { "${it.accountId}:${it.seriesId}" }) { s -> SeriesTile(s, onClick = { openSeries = s }) }
                 }
             }

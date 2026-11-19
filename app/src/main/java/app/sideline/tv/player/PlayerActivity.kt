@@ -437,7 +437,7 @@ class PlayerActivity : ComponentActivity() {
         title = c.name
         subtitle = repo.categoryName(c)
         tried += c.key
-        prefs.pushRecent(c.key)
+        if (!app.sideline.tv.data.isEventChannel(c.baseName)) prefs.pushRecent(c.key)
         start(client.liveUrl(c))
         showInfoBriefly()
         epgJob?.cancel()
@@ -920,7 +920,8 @@ class PlayerActivity : ComponentActivity() {
         val hiddenCats by prefs.hiddenCats.collectAsState()
         val cats by repo.liveCategories.collectAsState()
         val channels by repo.channels.collectAsState()
-        val recent by prefs.recentChannels.collectAsState()
+        val recentRaw by prefs.recentChannels.collectAsState()
+        val recent = remember(recentRaw) { recentRaw.filter { k -> repo.channel(k)?.let { !app.sideline.tv.data.isEventChannel(it.baseName) } ?: false } }
         val cur = current
         val curCat = cur?.let { "${it.accountId}:${it.categoryId}" }
         var group by remember { mutableStateOf(if (queue.size > 1) "__queue" else (curCat ?: "__fav")) }

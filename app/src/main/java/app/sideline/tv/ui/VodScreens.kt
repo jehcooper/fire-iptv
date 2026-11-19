@@ -159,13 +159,15 @@ private fun <T> VodBrowser(
                     items(continueItems, key = { it.key }) { p -> ProgressCard(p, onClick = { Play.resume(ctx, p) }) }
                 }
             } else {
-                LazyVerticalGrid(
-                    columns = GridCells.Adaptive(160.dp),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(18.dp),
-                    contentPadding = PaddingValues(12.dp, 8.dp, 12.dp, 60.dp),
-                ) {
-                    items(shown, key = keyOf) { tile(it) }
+                androidx.compose.runtime.CompositionLocalProvider(LocalPosterFill provides true) {
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(4),
+                        horizontalArrangement = Arrangement.spacedBy(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                        contentPadding = PaddingValues(12.dp, 10.dp, 12.dp, 60.dp),
+                    ) {
+                        items(shown, key = keyOf) { tile(it) }
+                    }
                 }
             }
         }

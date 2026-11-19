@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.sideline.tv.SidelineApp
 import app.sideline.tv.data.Channel
+import app.sideline.tv.data.isEventChannel
 import app.sideline.tv.data.EpgItem
 import app.sideline.tv.player.Play
 import coil.compose.AsyncImage
@@ -80,7 +81,9 @@ fun LiveScreen() {
     val cats = remember(allCats, hidden) { allCats.filter { "live:${it.accountId}:${it.id}" !in hidden } }
     val channels by repo.channels.collectAsState()
     val favs by prefs.favChannels.collectAsState()
-    val recent by prefs.recentChannels.collectAsState()
+    val recentRaw by prefs.recentChannels.collectAsState()
+    // Game/event channels ("NHL 07: Oilers at Lightning") are left out: they're useless once the game ends.
+    val recent = remember(recentRaw, channels) { recentRaw.filter { k -> repo.channel(k)?.let { !isEventChannel(it.baseName) } ?: false } }
     val accounts by prefs.accounts.collectAsState()
     val multiAccount = remember(cats) { cats.map { it.accountId }.distinct().size > 1 }
 

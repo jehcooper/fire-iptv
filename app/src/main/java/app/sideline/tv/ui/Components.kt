@@ -12,6 +12,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -195,6 +196,9 @@ fun GameCard(
 }
 
 /** Channel or poster tile with an image and caption. */
+/** True inside poster grids: tiles fill their column instead of a fixed size. */
+val LocalPosterFill = androidx.compose.runtime.staticCompositionLocalOf { false }
+
 @Composable
 fun PosterCard(
     title: String, image: String?, onClick: () -> Unit, modifier: Modifier = Modifier,
@@ -203,7 +207,9 @@ fun PosterCard(
 ) {
     val w = if (wide) 220.dp else 150.dp
     val h = if (wide) 124.dp else 225.dp
-    FocusCard(onClick = onClick, onFocus = onFocus, onMenu = onMenu, modifier = modifier.width(w).height(h)) { focused ->
+    // In grids the tile fills its column and keeps the poster's shape (so 4 fit across instead of 2 squashed ones).
+    val sized = if (LocalPosterFill.current) modifier.fillMaxWidth().aspectRatio(if (wide) 16f / 9f else 2f / 3f) else modifier.width(w).height(h)
+    FocusCard(onClick = onClick, onFocus = onFocus, onMenu = onMenu, modifier = sized) { focused ->
         AsyncImage(
             model = image, contentDescription = null,
             placeholder = if (wide) null else ColorPainter(C.Surface2),

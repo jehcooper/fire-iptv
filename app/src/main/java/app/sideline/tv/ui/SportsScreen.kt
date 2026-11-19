@@ -292,10 +292,12 @@ private fun GameListRow(
                         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
                             AsyncImage(model = c.logo, contentDescription = null, modifier = Modifier.size(20.dp))
                             Spacer(Modifier.width(7.dp))
-                            Text(c.name.ifBlank { c.shortName }, color = if (lost) C.Muted else C.Text, fontSize = 15.sp, maxLines = 1,
-                                overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
-                            rank?.let { Text("  ($it)", color = C.Faint, fontSize = 13.sp, maxLines = 1) }
-                            Spacer(Modifier.weight(1f))
+                            // Name + (position) take all the room up to the score; the name only shortens if it truly can't fit.
+                            Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                                Text(c.name.ifBlank { c.shortName }, color = if (lost) C.Muted else C.Text, fontSize = 15.sp, maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                                rank?.let { Text("  ($it)", color = C.Faint, fontSize = 13.sp, maxLines = 1, softWrap = false) }
+                            }
                             if (g.state != "pre") Text(if (spoilerFree) "•" else c.score, color = if (lost) C.Muted else C.Text,
                                 fontSize = 17.sp, fontWeight = if (won || g.isLive) FontWeight.Bold else FontWeight.SemiBold,
                                 modifier = Modifier.padding(start = 8.dp))

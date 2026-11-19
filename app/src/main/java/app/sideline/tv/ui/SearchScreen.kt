@@ -63,7 +63,7 @@ fun SearchScreen() {
     val series by SidelineApp.repo.series.collectAsState()
 
     val genres by produceState<List<TmdbApi.Genre>>(emptyList()) { if (Tmdb.configured) value = TmdbApi.genres() }
-    val results by produceState<Results?>(null, query) {
+    val results by produceState<Results?>(null, query, index != null) {
         value = null
         val q = query.trim()
         if (q.length < 2) return@produceState
@@ -77,7 +77,21 @@ fun SearchScreen() {
                 val a = async { TmdbApi.search(q) }
                 val k = async { TmdbApi.keywords(q) }
                 val (titles, people) = a.await()
-                Results(lib, titles, people, k.await(), genres.filter { it.name.contains(q, ignoreCase = true) }, null)
+                // "In your library" also lists what you have from the matching titles and, when you searched a
+                // person's name, everything of theirs you have (not just titles with the name in them).
+                val person = people.firstOrNull { Discover.norm(it.name) == n } ?: people.firstOrNull()?.takeIf { titles.none { t -> Discover.norm(t.title) == n } }
+                val credits = person?.let { TmdbApi.personCredits(it.id) }.orEmpty()
+                val idx = index
+                val more = if (idx == null) emptyList() else withContext(Dispatchers.Default) {
+                    (titles + credits).mapNotNull { t -> if (t.isTv) idx.series(t) else idx.movie(t) }
+                }
+                fun libKey(x: Any) = when (x) {
+                    is app.sideline.tv.data.Movie -> "m" + x.key
+                    is app.sideline.tv.data.Series -> "s${x.accountId}:${x.seriesId}"
+                    else -> x.hashCode().toString()
+                }
+                val allLib = (lib + more).distinctBy { libKey(it) }
+                Results(allLib, titles, people, k.await(), genres.filter { it.name.contains(q, ignoreCase = true) }, null)
             }
         } catch (e: Exception) {
             Results(lib, emptyList(), emptyList(), emptyList(), emptyList(), Tmdb.lastError.value ?: e.message)

@@ -473,14 +473,14 @@ private fun GridPage(title: String, subtitle: String, photo: String?, list: List
                 Spacer(Modifier.width(10.dp)); Text("Loading…", color = C.Muted)
             }
             sorted.isEmpty() -> Text(app.sideline.tv.data.Tmdb.lastError.value ?: "Nothing found.", color = C.Muted)
-            else -> LazyVerticalGrid(
-                GridCells.Adaptive(150.dp), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalArrangement = Arrangement.spacedBy(16.dp),
+            else -> androidx.compose.runtime.CompositionLocalProvider(LocalPosterFill provides true) { LazyVerticalGrid(
+                GridCells.Adaptive(130.dp), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalArrangement = Arrangement.spacedBy(16.dp),
                 contentPadding = PaddingValues(top = 6.dp, bottom = 60.dp, start = 4.dp, end = 4.dp),
             ) {
                 items(sorted, key = { (if (it.isTv) "t" else "m") + it.tmdbId }) { t ->
                     TitlePoster(t, index, modifier = if (t === sorted.first()) Modifier.focusRequester(first) else Modifier)
                 }
-            }
+            } }
         }
     }
 }
