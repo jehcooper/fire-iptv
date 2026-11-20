@@ -253,7 +253,7 @@ fun ScorePopupHost(modifier: Modifier = Modifier, skipStarts: Boolean = false) {
             val a = current ?: return@AnimatedVisibility
             val g = a.game
             Row(
-                Modifier.clip(RoundedCornerShape(16.dp)).background(Color(0xF0131A22))
+                Modifier.clip(RoundedCornerShape(16.dp)).background(C.Bg.copy(alpha = (100 - SidelineApp.prefs.popupTransparency.collectAsState().value) / 100f))
                     .border(2.dp, if (a.kind == AlertKind.SCORE) C.Accent else C.Faint, RoundedCornerShape(16.dp))
                     .padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically,

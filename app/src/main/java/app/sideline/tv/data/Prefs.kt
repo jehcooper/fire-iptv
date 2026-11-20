@@ -139,6 +139,14 @@ class Prefs(context: Context) {
     fun setGuideUrl(v: String) { _guideUrl.value = v.trim(); sp.edit().putString("guideUrl", v.trim()).apply() }
 
     /** How see-through the player's side panels are, 0–100 % in steps of 5 (0 = solid). */
+    private val _popupTransparency = MutableStateFlow(sp.getInt("popupTransparency", 10))
+    /** How see-through score pop-ups are, 0–100 in steps of 5. */
+    val popupTransparency: StateFlow<Int> = _popupTransparency
+    fun setPopupTransparency(v: Int) {
+        val c = (v / 5 * 5).coerceIn(0, 100)
+        _popupTransparency.value = c
+        sp.edit().putInt("popupTransparency", c).apply()
+    }
     private val _panelTransparency = MutableStateFlow(sp.getInt("panelTransparency", 30))
     val panelTransparency: StateFlow<Int> = _panelTransparency
     fun setPanelTransparency(v: Int) {

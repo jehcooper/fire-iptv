@@ -30,6 +30,12 @@ class ScoreWatcher(private val prefs: Prefs) {
     private val _alerts = MutableSharedFlow<ScoreAlert>(extraBufferCapacity = 16)
     val alerts: SharedFlow<ScoreAlert> = _alerts
 
+    /** Shows a sample pop-up (Settings → Score pop-ups) so you can judge the see-through level. */
+    fun testAlert() {
+        val g = _board.value.values.flatten().let { l -> l.firstOrNull { it.isLive } ?: l.firstOrNull() } ?: return
+        _alerts.tryEmit(ScoreAlert(g, AlertKind.SCORE, "Test pop-up", "This is how score pop-ups will look"))
+    }
+
     private val _teams = MutableStateFlow<Map<String, List<Team>>>(emptyMap())
     val teams: StateFlow<Map<String, List<Team>>> = _teams
 

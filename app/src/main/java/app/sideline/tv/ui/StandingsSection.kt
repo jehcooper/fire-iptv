@@ -80,7 +80,7 @@ fun StandingsSection(games: List<Game>, favTeams: Set<String>, leagueOpts: Set<S
     if (cards.isEmpty()) return
     Column {
         SectionTitle("Standings · live")
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(vertical = 10.dp, horizontal = 6.dp)) {
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 12.dp)) {
             items(cards, key = { it.leagueId + it.name }) { g -> StandingsCard(g, favIds) }
         }
     }
@@ -180,7 +180,7 @@ fun FullStandingsDialog(g: StandGroup, favIds: Set<String>, onDismiss: () -> Uni
                 Text("Live games are counted \"as if they ended now\" (● playing, ▲▼ moved). Back to close.",
                     color = C.Faint, fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp))
                 StandHeader(l)
-                LazyColumn(state = state, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                LazyColumn(state = state, verticalArrangement = Arrangement.spacedBy(2.dp), contentPadding = PaddingValues(start = 8.dp, top = 8.dp, end = 8.dp, bottom = 8.dp)) {
                     itemsIndexed(g.rows, key = { _, r -> r.teamId }) { i, r ->
                         FocusCard(onClick = {}, shape = RoundedCornerShape(6.dp), scaleOnFocus = 1f,
                             modifier = if (i == start) Modifier.focusRequester(first) else Modifier) { _ ->

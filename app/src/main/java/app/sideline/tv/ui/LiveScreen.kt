@@ -144,7 +144,7 @@ fun LiveScreen() {
     if (guide) {
         // Full-width TV guide; categories become a row of chips across the top.
         Column(Modifier.fillMaxSize().padding(start = 48.dp, end = 48.dp, top = 4.dp)) {
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(vertical = 6.dp)) {
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 12.dp)) {
                 item { Chip("☰ List view", false, onClick = { guide = false }) }
                 item { Chip("★ Favourites", selected == FAV, onClick = { selected = FAV }) }
                 items(cats, key = { "${it.accountId}:${it.id}" }) { c ->
@@ -160,7 +160,7 @@ fun LiveScreen() {
     if (searching) SearchDialog(query, "Search channels and programmes", onSearch = { query = it; selected = SEARCH; searching = false }, onDismiss = { searching = false })
 
     Row(Modifier.fillMaxSize().padding(start = 48.dp, end = 48.dp, top = 4.dp)) {
-        LazyColumn(Modifier.width(270.dp), verticalArrangement = Arrangement.spacedBy(3.dp), contentPadding = PaddingValues(bottom = 60.dp)) {
+        LazyColumn(Modifier.width(270.dp), verticalArrangement = Arrangement.spacedBy(3.dp), contentPadding = PaddingValues(start = 8.dp, top = 8.dp, end = 8.dp, bottom = 60.dp)) {
             item { CategoryItem("📺 TV guide view", false, selectOnFocus = false) { guide = true } }
             item {
                 // OK always opens the search window (with the last search filled in);
@@ -229,7 +229,7 @@ fun LiveScreen() {
                 Spacer(Modifier.height(10.dp))
             }
             if (selected == SEARCH && searchProgrammes) {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp), contentPadding = PaddingValues(bottom = 60.dp, top = 4.dp, start = 8.dp, end = 8.dp)) {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp), contentPadding = PaddingValues(start = 8.dp, top = 8.dp, end = 8.dp, bottom = 60.dp)) {
                     if (progResults.isEmpty()) item {
                         Text(if (app.sideline.tv.data.FullGuide.loaded) "No programmes match." else
                             "Programme search uses the full TV guide (Settings → TV guide).", color = C.Muted, modifier = Modifier.padding(16.dp))
@@ -246,7 +246,7 @@ fun LiveScreen() {
                     color = C.Muted, modifier = Modifier.padding(16.dp),
                 )
             }
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(3.dp), contentPadding = PaddingValues(bottom = 60.dp, top = 4.dp, start = 8.dp, end = 8.dp)) {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(3.dp), contentPadding = PaddingValues(start = 8.dp, top = 8.dp, end = 8.dp, bottom = 60.dp)) {
                 items(list, key = { it.key }) { c ->
                     FocusCard(
                         onClick = { Play.channel(ctx, c, list) },

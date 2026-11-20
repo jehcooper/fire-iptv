@@ -949,13 +949,13 @@ class PlayerActivity : ComponentActivity() {
             androidx.compose.runtime.CompositionLocalProvider(app.sideline.tv.ui.LocalPanelAlpha provides panelAlpha()) {
             Row(Modifier.fillMaxSize()) {
                 Row(Modifier.fillMaxHeight().width(820.dp).background(panelColor()).padding(start = 28.dp, top = 24.dp, end = 16.dp)) {
-                    LazyColumn(Modifier.width(220.dp), verticalArrangement = Arrangement.spacedBy(4.dp), contentPadding = PaddingValues(bottom = 40.dp)) {
+                    LazyColumn(Modifier.width(220.dp), verticalArrangement = Arrangement.spacedBy(4.dp), contentPadding = PaddingValues(start = 8.dp, top = 8.dp, end = 8.dp, bottom = 40.dp)) {
                         items(groups, key = { it.first }) { (k, name) ->
                             app.sideline.tv.ui.CategoryItem(name, group == k) { group = k }
                         }
                     }
                     Spacer(Modifier.width(16.dp))
-                    LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(4.dp), contentPadding = PaddingValues(bottom = 40.dp)) {
+                    LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(4.dp), contentPadding = PaddingValues(start = 8.dp, top = 8.dp, end = 8.dp, bottom = 40.dp)) {
                         items(list, key = { it.key }) { c ->
                             PanelChannelRow(c, c.key == cur?.key, c.key in favs,
                                 modifier = if (c.key == cur?.key) Modifier.focusRequester(curFocus) else Modifier,
@@ -1046,7 +1046,7 @@ class PlayerActivity : ComponentActivity() {
                             .forEach { (lid, list) -> add((Leagues.byId(lid)?.name ?: lid) to list) }
                     }
                     val firstId = sections.firstOrNull()?.second?.firstOrNull()?.id
-                    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 40.dp)) {
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(start = 8.dp, top = 8.dp, end = 8.dp, bottom = 40.dp)) {
                         sections.forEach { (heading, list) ->
                             item(key = "h-$heading") {
                                 Text("$heading  (${list.size})", color = C.Accent, fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
@@ -1081,7 +1081,7 @@ class PlayerActivity : ComponentActivity() {
                 Column(Modifier.fillMaxHeight().width(560.dp).background(panelColor()).padding(28.dp)) {
                     Text("Subtitles", color = C.Text, fontSize = 24.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(12.dp))
-                    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 40.dp)) {
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(start = 8.dp, top = 8.dp, end = 8.dp, bottom = 40.dp)) {
                         item {
                             Chip(if (!textOn) "✓ Off" else "Off", !textOn, modifier = Modifier.focusRequester(first), onClick = {
                                 subtitlesOff(); subsPanel = false

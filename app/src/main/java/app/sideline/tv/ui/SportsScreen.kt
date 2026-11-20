@@ -1,6 +1,9 @@
 package app.sideline.tv.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.foundation.border
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -192,7 +195,7 @@ fun SportsScreen(goTo: (Tab) -> Unit) {
             EmptyState("No games here", if (board.isEmpty()) "Loading scores…" else "Nothing matches these filters right now. Try “All games” or “All sports”.")
         } else Row(Modifier.fillMaxSize()) {
             LazyColumn(Modifier.width(470.dp).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(4.dp),
-                contentPadding = PaddingValues(bottom = 40.dp)) {
+                contentPadding = PaddingValues(start = 8.dp, top = 8.dp, end = 8.dp, bottom = 40.dp)) {
                 sections.forEach { (title, list) ->
                     item(key = "h-$title") {
                         Text("$title · ${list.size}", color = if (title == "Live") C.Live else C.Muted, fontSize = 13.sp,
@@ -385,9 +388,7 @@ private fun SportsDetails(game: Game, first: FocusRequester, onMore: () -> Unit)
             }
             detail?.let { d ->
                 item(key = "detail") {
-                    FocusCard(onClick = {}, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp), scaleOnFocus = 1f) { _ ->
-                        Box(Modifier.padding(6.dp)) { GameDetailView(d) }
-                    }
+                    GameDetailView(d)
                 }
             }
         }
@@ -405,7 +406,7 @@ private fun PickDialog(title: String, options: List<Pair<String, String>>, selec
         Box(Modifier.fillMaxSize().background(Color(0x99000000)), contentAlignment = Alignment.Center) {
             Column(Modifier.width(440.dp).fillMaxHeight(0.85f).clip(RoundedCornerShape(16.dp)).background(C.Surface).padding(18.dp)) {
                 Text(title, color = C.Text, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 10.dp))
-                LazyColumn(state = state, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                LazyColumn(state = state, verticalArrangement = Arrangement.spacedBy(4.dp), contentPadding = PaddingValues(start = 8.dp, top = 8.dp, end = 8.dp, bottom = 8.dp)) {
                     itemsIndexed(options, key = { _, o -> o.first }) { i, (key, label) ->
                         FocusCard(onClick = { onPick(key) }, modifier = Modifier.fillMaxWidth().let { if (i == start) it.focusRequester(first) else it },
                             shape = RoundedCornerShape(10.dp), scaleOnFocus = 1.02f) { _ ->
@@ -449,7 +450,7 @@ private fun TablesView(leagueId: String, favIds: Set<String>) {
             val state = rememberLazyListState(initialFirstVisibleItemIndex = (target - 4).coerceAtLeast(0))
             LaunchedEffect(leagueId) { delay(250); try { first.requestFocus() } catch (_: Exception) {} }
             LazyColumn(state = state, modifier = Modifier.width(760.dp).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(2.dp),
-                contentPadding = PaddingValues(bottom = 40.dp)) {
+                contentPadding = PaddingValues(start = 8.dp, top = 8.dp, end = 8.dp, bottom = 40.dp)) {
                 itemsIndexed(entries, key = { _, e -> "${e.first}-${e.third?.teamId ?: "h"}" }) { idx, (gi, i, r) ->
                     if (r == null) {
                         Column(Modifier.padding(top = if (gi == 0) 0.dp else 14.dp)) {
@@ -561,10 +562,15 @@ fun GameSheet(game: Game, onDismiss: () -> Unit) {
         Box(Modifier.fillMaxSize().background(Color(0xCC000000)), contentAlignment = Alignment.CenterEnd) {
             Row(Modifier.fillMaxHeight().width(860.dp).background(C.Surface).padding(start = 28.dp, top = 24.dp, end = 20.dp)) {
                 // Left: score and everything about the game.
-                LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 40.dp)) {
+                // ◀ moves in here from the buttons; ▲▼ then steps through every block and scrolls.
+                LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(start = 8.dp, top = 8.dp, end = 8.dp, bottom = 60.dp)) {
                     item { ScoreHeader(live, spoilerFree, compact = true) }
                     if (!spoilerFree) {
-                        item { LiveDetailsFull(live) }
+                        if (live.isLive || !live.soccer?.goals.isNullOrEmpty()) item {
+                            FocusCard(onClick = {}, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp), scaleOnFocus = 1f) { _ ->
+                                Box(Modifier.padding(10.dp)) { LiveDetailsFull(live) }
+                            }
+                        }
                         detail?.let { d -> item { GameDetailView(d) } }
                     }
                 }
@@ -590,7 +596,7 @@ fun GameSheet(game: Game, onDismiss: () -> Unit) {
                             "No channel found yet. Still checking the TV guide; or try Live TV's sports categories.",
                             color = C.Muted, fontSize = 13.sp,
                         )
-                        else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp), contentPadding = PaddingValues(bottom = 40.dp)) {
+                        else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp), contentPadding = PaddingValues(start = 8.dp, top = 8.dp, end = 8.dp, bottom = 40.dp)) {
                             items(matches, key = { it.channel.key }) { m ->
                                 MatchRow(m, onClick = { Play.channel(ctx, m.channel, matches.map { it.channel }) })
                             }
@@ -608,17 +614,12 @@ fun GameDetailView(d: app.sideline.tv.sports.GameDetail) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         if (d.periodLines.isNotEmpty()) PeriodTable(if (d.shotsLines.isNotEmpty()) "Goals" else "Score", d.periodHeaders, d.periodLines)
         if (d.shotsLines.isNotEmpty()) PeriodTable("Shots on goal", d.periodHeaders, d.shotsLines)
-        if (d.goalsByPeriod.isNotEmpty()) DetailBlock("Goals") {
-            d.goalsByPeriod.forEach { (p, lines) ->
-                Text(p, color = C.Accent, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 2.dp))
-                lines.forEach { Text(it, color = C.Text, fontSize = 12.sp) }
-            }
+        // One block per period, so ▲▼ can step through them and the list scrolls with you.
+        d.goalsByPeriod.forEach { (p, lines) ->
+            DetailBlock("Goals · $p") { lines.forEach { Text(it, color = C.Text, fontSize = 13.sp) } }
         }
-        if (d.penaltiesByPeriod.isNotEmpty()) DetailBlock("Penalties") {
-            d.penaltiesByPeriod.forEach { (p, lines) ->
-                Text(p, color = C.Accent, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 2.dp))
-                lines.forEach { Text(it, color = C.Muted, fontSize = 12.sp) }
-            }
+        d.penaltiesByPeriod.forEach { (p, lines) ->
+            DetailBlock("Penalties · $p") { lines.forEach { Text(it, color = C.Muted, fontSize = 13.sp) } }
         }
         if (d.goalies.isNotEmpty()) DetailBlock("Goalies") { d.goalies.forEach { Text(it, color = C.Text, fontSize = 12.sp) } }
         if (d.leaders.isNotEmpty()) DetailBlock("Leaders") {
@@ -642,7 +643,13 @@ fun GameDetailView(d: app.sideline.tv.sports.GameDetail) {
 
 @Composable
 private fun DetailBlock(title: String, content: @Composable () -> Unit) {
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(C.Surface2).padding(10.dp)) {
+    // Each block can be selected (white outline), so the remote can reach and scroll through all of them.
+    var focused by remember { mutableStateOf(false) }
+    Column(
+        Modifier.fillMaxWidth().onFocusChanged { focused = it.isFocused }.focusable()
+            .clip(RoundedCornerShape(10.dp)).background(C.Surface2)
+            .border(2.dp, if (focused) C.Accent else Color.Transparent, RoundedCornerShape(10.dp)).padding(10.dp),
+    ) {
         Text(title, color = C.Text, fontSize = 13.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 4.dp))
         content()
     }

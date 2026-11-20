@@ -108,7 +108,7 @@ fun SettingsScreen() {
                 SectionTitle("IPTV accounts")
                 Text("Add each subscription and choose what it supplies. Everything shows together.", color = C.Muted, fontSize = 14.sp)
                 Spacer(Modifier.height(12.dp))
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(vertical = 6.dp)) {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 12.dp)) {
                     items(accounts, key = { it.id }) { a ->
                         FocusCard(onClick = { editing = a }, modifier = Modifier.width(280.dp).height(110.dp)) { _ ->
                             Column(Modifier.padding(16.dp)) {
@@ -138,7 +138,7 @@ fun SettingsScreen() {
                 Spacer(Modifier.height(8.dp))
                 Leagues.all.groupBy { it.group }.forEach { (group, list) ->
                     Text(group, color = C.Faint, fontSize = 13.sp, modifier = Modifier.padding(top = 10.dp, bottom = 4.dp))
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(vertical = 6.dp)) {
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 12.dp)) {
                         items(list, key = { it.id }) { l -> Chip(l.name, l.id in favLeagues, onClick = { prefs.toggleLeague(l.id); SidelineApp.scores.refreshNow() }) }
                     }
                 }
@@ -152,7 +152,7 @@ fun SettingsScreen() {
                     color = C.Muted, fontSize = 14.sp)
                 val opts by prefs.leagueOpts.collectAsState()
                 val picked = Leagues.all.filter { it.id in favLeagues } + confs.filter { it.id in favConfs }.map { Leagues.conferenceLeague(it) }
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(vertical = 8.dp)) {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 12.dp)) {
                     items(picked, key = { it.id }) { l ->
                         val on = listOf("standings" to "table", "live" to "live", "popups" to "pop-ups").filter { "${l.id}|${it.first}" in opts }.map { it.second }
                         Chip(if (on.isEmpty()) l.tag else "${l.tag}: ${on.joinToString(" · ")}", on.isNotEmpty(), onClick = { leagueOptsFor = l.id })
@@ -166,7 +166,7 @@ fun SettingsScreen() {
                 SectionTitle("College football conferences")
                 Text("Each conference you pick gets its own tab on the Sports screen with all its games.", color = C.Muted, fontSize = 14.sp)
                 Spacer(Modifier.height(8.dp))
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(vertical = 6.dp)) {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 12.dp)) {
                     items(confs, key = { it.id }) { c ->
                         Chip(c.short, c.id in favConfs, onClick = { prefs.toggleConference(c.id); SidelineApp.scores.refreshNow() })
                     }
@@ -181,7 +181,7 @@ fun SettingsScreen() {
                 Spacer(Modifier.height(8.dp))
                 val teamLeagues = Leagues.all.filter { it.kind == LeagueKind.TEAM && (it.id in favLeagues || (it.id == "ncaaf" && favConfs.isNotEmpty())) }
                 if (teamLeagues.isEmpty()) Text("Turn on a team league above first.", color = C.Faint)
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(vertical = 6.dp)) {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 12.dp)) {
                     items(teamLeagues, key = { it.id }) { l -> Chip("Pick ${l.name} teams", false, onClick = { teamsFor = l.id }) }
                 }
             }
@@ -286,7 +286,7 @@ fun SettingsScreen() {
                     Chip(if (subsOn) "✓ Subtitles on" else "Subtitles off", subsOn, onClick = { prefs.setSubsOn(!subsOn) })
                 }
                 Text("Language:", color = C.Muted, fontSize = 14.sp, modifier = Modifier.padding(top = 10.dp))
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(vertical = 6.dp)) {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 12.dp)) {
                     items(listOf("en" to "English", "fr" to "French", "es" to "Spanish", "hi" to "Hindi", "de" to "German", "pt-br" to "Portuguese", "ar" to "Arabic")) { (code, name) ->
                         Chip(name, subsLang == code, onClick = { prefs.setSubsLang(code) })
                     }
@@ -332,6 +332,26 @@ fun SettingsScreen() {
                 }
                 Text("0% = solid · 100% = fully see-through (text can be hard to read over a busy picture).", color = C.Faint, fontSize = 12.sp,
                     modifier = Modifier.padding(top = 4.dp))
+            }
+        }
+
+        item {
+            Column {
+                SectionTitle("Score pop-ups")
+                val t by prefs.popupTransparency.collectAsState()
+                Text("How see-through the score pop-ups are (goals, game starting…).", color = C.Muted, fontSize = 14.sp)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(top = 8.dp)) {
+                    Chip("− 5%", false, onClick = { prefs.setPopupTransparency(t - 5) })
+                    Box(Modifier.width(150.dp).height(40.dp).clip(RoundedCornerShape(8.dp))
+                        .background(androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(Color(0xFFE85D3A), Color(0xFF3A8EE8), Color(0xFF3AE87A))))) {
+                        Box(Modifier.fillMaxSize().background(C.Bg.copy(alpha = (100 - t) / 100f)), contentAlignment = Alignment.Center) {
+                            Text("$t% see-through", color = C.Text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                    Chip("+ 5%", false, onClick = { prefs.setPopupTransparency(t + 5) })
+                    Chip("Default (10%)", t == 10, onClick = { prefs.setPopupTransparency(10) })
+                    Chip("Show a test pop-up", false, onClick = { SidelineApp.scores.testAlert() })
+                }
             }
         }
 
@@ -524,7 +544,7 @@ private fun TeamPicker(leagueId: String, onDone: () -> Unit) {
             LazyVerticalGrid(
                 columns = GridCells.Adaptive(200.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp),
-                contentPadding = PaddingValues(bottom = 60.dp, top = 8.dp),
+                contentPadding = PaddingValues(start = 8.dp, top = 8.dp, end = 8.dp, bottom = 60.dp),
             ) {
                 sections.forEach { (title, list) ->
                     if (title.isNotBlank()) item(key = "h-$title", span = { GridItemSpan(maxLineSpan) }) {
@@ -617,7 +637,7 @@ private fun CategoryManager(kind: String, onDone: () -> Unit) {
                 LazyVerticalGrid(
                     columns = GridCells.Adaptive(260.dp),
                     horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp),
-                    contentPadding = PaddingValues(bottom = 60.dp),
+                    contentPadding = PaddingValues(start = 8.dp, top = 8.dp, end = 8.dp, bottom = 60.dp),
                 ) {
                     items(cats, key = { "${it.accountId}:${it.id}" }) { c ->
                         val k = "$kind:${c.accountId}:${c.id}"
@@ -668,7 +688,7 @@ private fun HiddenChannels(onDone: () -> Unit) {
                 LazyVerticalGrid(
                     columns = GridCells.Adaptive(260.dp),
                     horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp),
-                    contentPadding = PaddingValues(bottom = 60.dp),
+                    contentPadding = PaddingValues(start = 8.dp, top = 8.dp, end = 8.dp, bottom = 60.dp),
                 ) {
                     items(list, key = { it.key }) { c -> Chip("↺ ${c.name}", false, onClick = { prefs.toggleHiddenChannel(c.key) }) }
                 }
@@ -749,7 +769,7 @@ private fun SpeedTestDialog(onDone: () -> Unit) {
                         Text(progress.ifBlank { "Starting…" }, color = C.Muted, fontSize = 15.sp)
                     }
                 } else {
-                    LazyColumn(Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    LazyColumn(Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp), contentPadding = PaddingValues(start = 8.dp, top = 8.dp, end = 8.dp, bottom = 8.dp)) {
                         items(r.lines) { l ->
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 val (dot, col) = when (l.grade) {

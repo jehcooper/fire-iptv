@@ -97,7 +97,7 @@ fun DiscoverScreen(goTo: (Tab) -> Unit) {
         return
     }
     val hero = readyRows.firstOrNull()?.items?.firstOrNull { it.t.backdrop != null }
-    LazyColumn(contentPadding = PaddingValues(bottom = 60.dp), verticalArrangement = Arrangement.spacedBy(22.dp)) {
+    LazyColumn(contentPadding = PaddingValues(start = 8.dp, top = 8.dp, end = 8.dp, bottom = 60.dp), verticalArrangement = Arrangement.spacedBy(22.dp)) {
         if (hero != null) item { Hero(hero, onClick = { open(hero) }) }
         item {
             Row(Modifier.padding(horizontal = 48.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -123,7 +123,7 @@ fun DiscoverScreen(goTo: (Tab) -> Unit) {
         items(readyRows, key = { it.title }) { row ->
             Column(Modifier.padding(start = 48.dp)) {
                 SectionTitle(row.title)
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(end = 48.dp, top = 4.dp, bottom = 4.dp)) {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 48.dp, bottom = 12.dp)) {
                     items(row.items, key = { it.t.tmdbId + it.t.isTv }) { i ->
                         PosterCard(
                             i.t.title, i.movie?.poster?.takeIf { i.t.poster == null } ?: i.t.poster,

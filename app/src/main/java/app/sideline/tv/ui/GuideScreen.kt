@@ -99,7 +99,7 @@ fun ProgramGuide(channels: List<Channel>) {
                         }
                     }
                 }
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp), contentPadding = PaddingValues(bottom = 60.dp)) {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp), contentPadding = PaddingValues(start = 8.dp, top = 8.dp, end = 8.dp, bottom = 60.dp)) {
                     items(channels, key = { it.key }) { c ->
                         GuideRow(c, windowStart, windowLen, chanW, gridW, perSec, tick,
                             onFocus = { focused = c to it },

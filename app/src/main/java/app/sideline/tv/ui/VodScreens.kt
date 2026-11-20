@@ -114,7 +114,7 @@ private fun <T> VodBrowser(
         onSearch = { query = it; selected = FIND; searching = false }, onDismiss = { searching = false })
 
     Row(Modifier.fillMaxSize().padding(start = 48.dp, end = 32.dp, top = 8.dp)) {
-        LazyColumn(Modifier.width(280.dp), verticalArrangement = Arrangement.spacedBy(4.dp), contentPadding = PaddingValues(bottom = 60.dp)) {
+        LazyColumn(Modifier.width(280.dp), verticalArrangement = Arrangement.spacedBy(4.dp), contentPadding = PaddingValues(start = 8.dp, top = 8.dp, end = 8.dp, bottom = 60.dp)) {
             if (featured != null) item { CategoryItem("✨ Featured", selected == FEATURED) { selected = FEATURED } }
             if (continueItems.isNotEmpty()) item { CategoryItem("▶ Continue watching  (${continueItems.size})", selected == CONTINUE) { selected = CONTINUE } }
             item {
@@ -332,11 +332,11 @@ fun SeriesSheet(s: Series, onDismiss: () -> Unit) {
         if (eps == null) { Text("Loading episodes…", color = C.Muted); return@DetailSheet }
         if (eps.isEmpty()) { Text("No episodes found.", color = C.Muted); return@DetailSheet }
         val seasons = eps.map { it.season }.distinct().sorted()
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(vertical = 6.dp)) {
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 12.dp)) {
             items(seasons) { n -> Chip("Season $n", n == season, onClick = { season = n }) }
         }
         Spacer(Modifier.height(10.dp))
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 60.dp, end = 8.dp)) {
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(start = 8.dp, top = 8.dp, end = 8.dp, bottom = 60.dp)) {
             items(eps.filter { it.season == season }, key = { it.id }) { e ->
                 FocusCard(onClick = { Play.episode(ctx, e, s.name, s.seriesId, s.cover) }, modifier = Modifier.fillMaxWidth(), scaleOnFocus = 1.02f) { _ ->
                     Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -413,11 +413,11 @@ private fun FeaturedMovies(movies: List<Movie>, onOpen: (Movie) -> Unit) {
             else if (raw.isEmpty()) "Loading what's trending…" else "None of this week's trending movies are in your library yet.",
             color = C.Muted, modifier = Modifier.padding(16.dp),
         )
-        else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(start = 8.dp, top = 4.dp, bottom = 60.dp)) {
+        else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(start = 8.dp, top = 8.dp, end = 8.dp, bottom = 60.dp)) {
             items(r, key = { it.title }) { row ->
                 Column {
                     Text(row.title, color = C.Text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 6.dp))
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(end = 24.dp, top = 4.dp, bottom = 4.dp)) {
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 24.dp, bottom = 12.dp)) {
                         items(row.items, key = { it.t.tmdbId }) { i ->
                             val m = i.movie ?: return@items
                             PosterCard(m.name, m.poster ?: i.t.poster, onClick = { onOpen(m) },
@@ -451,11 +451,11 @@ private fun FeaturedSeries(series: List<Series>, onOpen: (Series) -> Unit) {
             else if (raw.isEmpty()) "Loading what's trending…" else "None of this week's trending shows are in your library yet.",
             color = C.Muted, modifier = Modifier.padding(16.dp),
         )
-        else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(start = 8.dp, top = 4.dp, bottom = 60.dp)) {
+        else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(start = 8.dp, top = 8.dp, end = 8.dp, bottom = 60.dp)) {
             items(r, key = { it.title }) { row ->
                 Column {
                     Text(row.title, color = C.Text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 6.dp))
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(end = 24.dp, top = 4.dp, bottom = 4.dp)) {
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 24.dp, bottom = 12.dp)) {
                         items(row.items, key = { it.t.tmdbId }) { i ->
                             val sr = i.series ?: return@items
                             PosterCard(sr.name, sr.cover ?: i.t.poster, onClick = { onOpen(sr) },

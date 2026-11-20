@@ -105,7 +105,7 @@ fun SearchScreen() {
         SearchButton(query, "OK to type…", onClick = { typing = true })
         Spacer(Modifier.size(12.dp))
 
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(18.dp), contentPadding = PaddingValues(bottom = 80.dp)) {
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(18.dp), contentPadding = PaddingValues(start = 8.dp, top = 8.dp, end = 8.dp, bottom = 80.dp)) {
             val r = results
             if (query.trim().length < 2) {
                 if (!Tmdb.configured) item { Text("Add a TMDB key in Settings to search actors, genres and everything that isn't in your library.", color = C.Muted) }
@@ -133,7 +133,7 @@ fun SearchScreen() {
                 if (r.error != null) item { Text(r.error, color = C.Gold, fontSize = 14.sp) }
                 if (r.lib.isNotEmpty()) item(key = "lib") {
                     Section("In your library (${r.lib.size})") {
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(vertical = 6.dp, horizontal = 2.dp)) {
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 12.dp)) {
                             items(r.lib, key = { x ->
                                 when (x) { is app.sideline.tv.data.Movie -> "m" + x.key; is app.sideline.tv.data.Series -> "s${x.accountId}:${x.seriesId}"; else -> x.hashCode() }
                             }) { x ->
@@ -167,14 +167,14 @@ fun SearchScreen() {
                 }
                 if (r.titles.isNotEmpty()) item(key = "titles") {
                     Section("Movies & series") {
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(vertical = 6.dp, horizontal = 2.dp)) {
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 12.dp)) {
                             items(libraryFirst(r.titles, index), key = { (if (it.isTv) "t" else "m") + it.tmdbId }) { t -> TitlePoster(t, index) }
                         }
                     }
                 }
                 if (r.people.isNotEmpty()) item(key = "people") {
                     Section("People") {
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp), contentPadding = PaddingValues(vertical = 6.dp, horizontal = 2.dp)) {
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 12.dp)) {
                             items(r.people, key = { it.id }) { p ->
                                 FocusCard(onClick = { Pages.open(Page.Person(p.id, p.name, p.photo)) }, modifier = Modifier.width(150.dp)) { _ ->
                                     Column(Modifier.padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {

@@ -316,7 +316,7 @@ private fun TitlePage(page: Page.Title) {
             // ---- Seasons & episodes (TMDB names, pictures and descriptions; ▶ where your provider has it) ----
             if (isTv && seasonNums.isNotEmpty()) {
                 item(key = "seasons") {
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(vertical = 6.dp, horizontal = 2.dp)) {
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 12.dp)) {
                         items(seasonNums) { n ->
                             val name = d?.seasons?.firstOrNull { it.number == n }?.name?.takeIf { it.isNotBlank() } ?: if (n == 0) "Specials" else "Season $n"
                             Chip(name, n == season, onClick = { season = n }, compact = true)
@@ -339,7 +339,7 @@ private fun TitlePage(page: Page.Title) {
             if (cast.isNotEmpty()) item(key = "cast") {
                 Column {
                     Text("Cast", color = C.Text, fontSize = 19.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 8.dp))
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp), contentPadding = PaddingValues(vertical = 6.dp, horizontal = 2.dp)) {
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 12.dp)) {
                         items(cast, key = { it.id + it.role }) { p ->
                             FocusCard(onClick = { Pages.open(Page.Person(p.id, p.name, p.photo)) }, modifier = Modifier.width(120.dp),
                                 shape = RoundedCornerShape(14.dp)) { _ ->
@@ -361,7 +361,7 @@ private fun TitlePage(page: Page.Title) {
             if (more.isNotEmpty()) item(key = "more") {
                 Column {
                     Text("More like this", color = C.Text, fontSize = 19.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 8.dp))
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(vertical = 6.dp, horizontal = 2.dp)) {
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 12.dp)) {
                         items(libraryFirst(more, index), key = { it.tmdbId }) { t -> TitlePoster(t, index) }
                     }
                 }
@@ -475,7 +475,7 @@ private fun GridPage(title: String, subtitle: String, photo: String?, list: List
             sorted.isEmpty() -> Text(app.sideline.tv.data.Tmdb.lastError.value ?: "Nothing found.", color = C.Muted)
             else -> androidx.compose.runtime.CompositionLocalProvider(LocalPosterFill provides true) { LazyVerticalGrid(
                 GridCells.Adaptive(130.dp), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalArrangement = Arrangement.spacedBy(16.dp),
-                contentPadding = PaddingValues(top = 6.dp, bottom = 60.dp, start = 4.dp, end = 4.dp),
+                contentPadding = PaddingValues(start = 8.dp, top = 8.dp, end = 8.dp, bottom = 60.dp),
             ) {
                 items(sorted, key = { (if (it.isTv) "t" else "m") + it.tmdbId }) { t ->
                     TitlePoster(t, index, modifier = if (t === sorted.first()) Modifier.focusRequester(first) else Modifier)

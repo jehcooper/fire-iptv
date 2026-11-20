@@ -174,6 +174,8 @@ function rDisplay(){
   const d=S.display;
   $('#main').innerHTML=`<div class="card"><h2>Player panels</h2><label>See-through: <b id="ptv">${d.panelTransparency}%</b> (0% = solid)</label>
    <input type="range" id="pt" min="0" max="100" step="5" value="${d.panelTransparency}" style="width:100%" oninput="$('#ptv').textContent=this.value+'%'"></div>
+  <div class="card"><h2>Score pop-ups</h2><label>See-through: <b id="pptv">${d.popupTransparency}%</b> (0% = solid)</label>
+   <input type="range" id="ppt" min="0" max="100" step="5" value="${d.popupTransparency}" style="width:100%" oninput="$('#pptv').textContent=this.value+'%'"></div>
   <div class="card"><h2>Sports</h2>
    <label class="chk"><input type="checkbox" id="spoil" ${d.spoilerFree?'checked':''}> Spoiler-free (hide scores)</label>
    <label class="chk"><input type="checkbox" id="auto" ${d.autoFollowTeams?'checked':''}> Score pop-ups for my favourite teams automatically</label></div>
@@ -194,7 +196,7 @@ function collect(){
     case 'categories': return {hidden:[...S.catHidden]};
     case 'keys': return {tmdb:$('#tmdb').value.trim(),omdb:$('#omdb').value.trim(),osKey:$('#osKey').value.trim(),osUser:$('#osUser').value.trim(),osPass:$('#osPass').value,traktId:$('#traktId').value.trim(),traktSecret:$('#traktSecret').value.trim()};
     case 'guide': return {source:(document.querySelector('[name=gs]:checked')||{}).value||'full',url:$('#gurl').value.trim()};
-    case 'display': {const d={panelTransparency:+$('#pt').value,spoilerFree:$('#spoil').checked,autoFollowTeams:$('#auto').checked,subsOn:$('#subs').checked,subsLang:$('#lang').value.trim()};S.display=d;return d}
+    case 'display': {const d={panelTransparency:+$('#pt').value,popupTransparency:+$('#ppt').value,spoilerFree:$('#spoil').checked,autoFollowTeams:$('#auto').checked,subsOn:$('#subs').checked,subsLang:$('#lang').value.trim()};S.display=d;return d}
   }
 }
 $('#save').onclick=async()=>{

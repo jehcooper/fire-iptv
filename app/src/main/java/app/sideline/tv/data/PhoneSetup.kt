@@ -49,6 +49,7 @@ object PhoneSetup {
             putJsonObject("guide") { put("source", prefs.guideSource.value); put("url", prefs.guideUrl.value) }
             putJsonObject("display") {
                 put("panelTransparency", prefs.panelTransparency.value)
+                put("popupTransparency", prefs.popupTransparency.value)
                 put("spoilerFree", prefs.spoilerFree.value)
                 put("autoFollowTeams", prefs.autoFollowTeams.value)
                 put("subsOn", prefs.subsOn.value)
@@ -125,6 +126,7 @@ object PhoneSetup {
             }
             "display" -> {
                 prefs.setPanelTransparency((d["panelTransparency"] as? JsonPrimitive)?.intOrNull ?: prefs.panelTransparency.value)
+                prefs.setPopupTransparency((d["popupTransparency"] as? JsonPrimitive)?.intOrNull ?: prefs.popupTransparency.value)
                 prefs.setSpoilerFree(d.bool("spoilerFree"))
                 prefs.setAutoFollowTeams(d.bool("autoFollowTeams"))
                 prefs.setSubsOn(d.bool("subsOn"))
