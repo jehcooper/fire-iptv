@@ -1,5 +1,6 @@
 package app.sideline.tv.ui
 
+import androidx.compose.runtime.produceState
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
@@ -204,11 +205,16 @@ fun PosterCard(
     title: String, image: String?, onClick: () -> Unit, modifier: Modifier = Modifier,
     wide: Boolean = false, badge: String? = null, onFocus: (() -> Unit)? = null, onMenu: (() -> Unit)? = null,
     badgeColor: Color = C.Accent, badgeTextColor: Color = C.OnAccent,
+    /** "movie" or "series" for your library items (lets the grid fetch TMDB's sharper poster). */
+    kind: String? = null,
 ) {
+    if (LocalPosterFill.current && !wide) {
+        GridPoster(title, image, onClick, modifier, badge, onFocus, onMenu, badgeColor, kind)
+        return
+    }
     val w = if (wide) 220.dp else 150.dp
     val h = if (wide) 124.dp else 225.dp
-    // In grids the tile fills its column and keeps the poster's shape (so 4 fit across instead of 2 squashed ones).
-    val sized = if (LocalPosterFill.current) modifier.fillMaxWidth().aspectRatio(if (wide) 16f / 9f else 2f / 3f) else modifier.width(w).height(h)
+    val sized = if (LocalPosterFill.current) modifier.fillMaxWidth().aspectRatio(16f / 9f) else modifier.width(w).height(h)
     FocusCard(onClick = onClick, onFocus = onFocus, onMenu = onMenu, modifier = sized) { focused ->
         AsyncImage(
             model = image, contentDescription = null,
@@ -225,6 +231,40 @@ fun PosterCard(
                 fontWeight = if (focused) FontWeight.SemiBold else FontWeight.Normal)
         }
         if (badge != null) Box(Modifier.align(Alignment.TopEnd).padding(8.dp)) { Pill(badge, badgeColor, badgeTextColor) }
+    }
+}
+
+/**
+ * Grid tile (Movies, Series, people and genre pages): a clean poster with nothing on it, and below it the
+ * full title (never cut short; it wraps) and the rating · year. Library posters are swapped for TMDB's sharper
+ * artwork when a match is found.
+ */
+@Composable
+private fun GridPoster(
+    title: String, image: String?, onClick: () -> Unit, modifier: Modifier, badge: String?,
+    onFocus: (() -> Unit)?, onMenu: (() -> Unit)?, badgeColor: Color, kind: String?,
+) {
+    val clean = remember(title) { app.sideline.tv.data.MovieInfoService.cleanTitle(title) }
+    val hasYearInTitle = Regex("\\((19|20)\\d{2}\\)\\s*$").containsMatchIn(title)
+    val name = if (kind != null) clean.first else if (hasYearInTitle) title.replace(Regex("\\s*\\((19|20)\\d{2}\\)\\s*$"), "") else title
+    val year = clean.second ?: Regex("\\((19|20)\\d{2}\\)").find(title)?.value?.trim('(', ')')
+    val hq by produceState<String?>(app.sideline.tv.data.TmdbApi.cachedPoster(clean.first, clean.second, kind == "series"), title, kind) {
+        if (kind == null || value != null || !app.sideline.tv.data.Tmdb.configured) return@produceState
+        delay(450)   // only for tiles you stop on or scroll past slowly
+        value = app.sideline.tv.data.TmdbApi.poster(clean.first, clean.second, kind == "series")
+    }
+    var focused by remember { mutableStateOf(false) }
+    Column(modifier.fillMaxWidth()) {
+        FocusCard(onClick = onClick, onFocus = { focused = true; onFocus?.invoke() }, onMenu = onMenu,
+            modifier = Modifier.fillMaxWidth().aspectRatio(2f / 3f).onFocusChanged { focused = it.hasFocus }) { _ ->
+            AsyncImage(model = hq ?: image, contentDescription = null, placeholder = ColorPainter(C.Surface2),
+                contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+        }
+        Text(name, color = C.Text, fontSize = 14.sp, lineHeight = 18.sp, fontWeight = if (focused) FontWeight.Bold else FontWeight.SemiBold,
+            modifier = Modifier.padding(top = 8.dp, start = 2.dp, end = 2.dp))
+        val meta = listOfNotNull(badge, year?.takeIf { badge?.contains(it) != true }).joinToString("  ·  ")
+        if (meta.isNotBlank()) Text(meta, color = if (badgeColor == C.Live) C.Live else C.Muted, fontSize = 12.sp,
+            modifier = Modifier.padding(top = 2.dp, start = 2.dp, end = 2.dp))
     }
 }
 

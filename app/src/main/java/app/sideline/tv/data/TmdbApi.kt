@@ -130,8 +130,31 @@ object TmdbApi {
                 .ifEmpty { if (!year.isNullOrBlank()) Tmdb.get(path, q(false))?.get("results").arr()?.mapNotNull { it.obj() }.orEmpty() else emptyList() }
             val want = Discover.norm(name)
             val best = hits.firstOrNull { Discover.norm(it.s("title") ?: it.s("name") ?: "") == want } ?: hits.firstOrNull()
+            img(best?.s("poster_path"), "w500")?.let { savePoster("${if (isTv) "tv" else "m"}|$name|$year", it) }
             (best?.s("id") ?: "").also { ids[ck] = it }.ifBlank { null }
         } catch (e: Exception) { null }
+    }
+
+    // ---- Sharper posters for your library (kept on disk so each title is looked up once) ----
+    private val posters = java.util.concurrent.ConcurrentHashMap<String, String>()
+    @Volatile private var postersLoaded = false
+    private fun posterFile() = java.io.File(Net.cacheDir ?: java.io.File("/tmp"), "tmdb_posters.txt")
+    private fun loadPosters() {
+        if (postersLoaded) return
+        postersLoaded = true
+        try { posterFile().takeIf { it.exists() }?.forEachLine { l -> l.split('\t').takeIf { it.size == 2 }?.let { posters[it[0]] = it[1] } } } catch (_: Exception) {}
+    }
+    private fun savePoster(key: String, url: String) {
+        loadPosters()
+        if (posters.put(key, url) == null) try { posterFile().appendText("$key\t$url\n") } catch (_: Exception) {}
+    }
+    /** TMDB poster already known for a library title (no network). */
+    fun cachedPoster(name: String, year: String?, isTv: Boolean): String? { loadPosters(); return posters["${if (isTv) "tv" else "m"}|$name|$year"] }
+    /** TMDB poster for a library title (one search, then remembered). */
+    suspend fun poster(name: String, year: String?, isTv: Boolean): String? {
+        cachedPoster(name, year, isTv)?.let { return it }
+        findId(name, year, isTv)
+        return cachedPoster(name, year, isTv)
     }
 
     /** Titles and people matching what you typed. */

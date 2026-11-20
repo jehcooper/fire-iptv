@@ -161,9 +161,9 @@ private fun <T> VodBrowser(
             } else {
                 androidx.compose.runtime.CompositionLocalProvider(LocalPosterFill provides true) {
                     LazyVerticalGrid(
-                        columns = GridCells.Fixed(4),
-                        horizontalArrangement = Arrangement.spacedBy(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                        columns = GridCells.Fixed(3),
+                        horizontalArrangement = Arrangement.spacedBy(18.dp),
+                        verticalArrangement = Arrangement.spacedBy(20.dp),
                         contentPadding = PaddingValues(12.dp, 10.dp, 12.dp, 60.dp),
                     ) {
                         items(shown, key = keyOf) { tile(it) }
@@ -205,7 +205,7 @@ fun MoviesScreen() {
         "vod", "No movies yet", cats, movies,
         catOf = { "${it.accountId}:${it.categoryId}" }, nameOf = { it.name }, keyOf = { it.key }, continueItems = cont,
         featured = if (app.sideline.tv.data.Tmdb.configured) ({ FeaturedMovies(movies) { open = it } }) else null,
-    ) { m -> PosterCard(m.name, m.poster, onClick = { open = m }, badge = m.rating?.takeIf { it != "0" && it.isNotBlank() }?.let { "★ ${it.take(3)}" }) }
+    ) { m -> PosterCard(m.name, m.poster, onClick = { open = m }, badge = m.rating?.takeIf { it != "0" && it.isNotBlank() }?.let { "★ ${it.take(3)}" }, kind = "movie") }
     open?.let { MovieSheet(it) { open = null } }
 }
 
@@ -384,7 +384,7 @@ fun SeriesTile(s: Series, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val fav = key in favs
     PosterCard(
         (if (fav) "★ " else "") + s.name, s.cover, onClick = onClick, modifier = modifier,
-        badge = ratingBadge(s.name, "series", s.rating),
+        badge = ratingBadge(s.name, "series", s.rating), kind = "series",
         onMenu = {
             Confirm.ask(if (fav) "Remove ${s.name} from favourite series?" else "Add ${s.name} to favourite series?",
                 yes = if (fav) "Remove" else "Add", destructive = fav) { prefs.toggleFavSeries(key) }
