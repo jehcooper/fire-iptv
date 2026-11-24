@@ -277,6 +277,11 @@ private fun TitlePage(page: Page.Title) {
                                 Chip("▶  Trailer", false, onClick = { TrailerActivity.start(ctx, trailers.map { it.key }, trailers.map { it.name }, title) },
                                     modifier = fm("trailer"))
                             }
+                            val wKey = libMovie?.let { "vod:${it.key}" } ?: libSeries?.let { "series:${it.accountId}:${it.seriesId}" }
+                            if (wKey != null) {
+                                val inList = wKey in prefs.watchlist.collectAsState().value
+                                Chip(if (inList) "✓ On watchlist" else "+ Watchlist", inList, onClick = { prefs.toggleWatchlist(wKey) })
+                            }
                             if (id != null) {
                                 val synced = Trakt.syncKey(isTv, id) in syncSet
                                 Chip(if (traktToken.isBlank()) "Trakt: not connected" else if (synced) "✓ Syncing to Trakt" else "Sync to Trakt", synced,

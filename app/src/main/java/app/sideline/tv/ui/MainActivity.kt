@@ -30,6 +30,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.focusGroup
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -96,11 +97,11 @@ private fun Root() {
             if (url != null) Box(Modifier.fillMaxSize()) {
                 coil.compose.AsyncImage(model = url, contentDescription = null, contentScale = androidx.compose.ui.layout.ContentScale.Crop,
                     modifier = Modifier.fillMaxSize())
-                Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0f to Color.Transparent, 0.45f to C.Bg.copy(alpha = 0.35f), 0.75f to C.Bg.copy(alpha = 0.92f), 1f to C.Bg)))
-                Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(0f to C.Bg.copy(alpha = 0.75f), 0.5f to C.Bg.copy(alpha = 0.25f), 1f to Color.Transparent)))
+                Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0f to Color.Transparent, 0.4f to C.Bg.copy(alpha = 0.3f), 0.66f to C.Bg.copy(alpha = 0.95f), 1f to C.Bg)))
+                Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(0f to C.Bg.copy(alpha = 0.95f), 0.35f to C.Bg.copy(alpha = 0.6f), 0.7f to Color.Transparent)))
             }
         }
-        Column(Modifier.fillMaxSize().padding(start = 60.dp)) {
+        Column(Modifier.fillMaxSize().padding(start = 64.dp)) {
             Row(
                 Modifier.fillMaxWidth().padding(start = 48.dp, end = 40.dp, top = 14.dp, bottom = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -123,6 +124,7 @@ private fun Root() {
                 }
             }
         }
+        Box(Modifier.fillMaxSize().padding(start = 76.dp), contentAlignment = Alignment.BottomCenter) { HintBar(tab) }
         Sidebar(tab, onSelect = { tab = it }, build = build)
         ScorePopupHost()
         ReminderHost()
@@ -134,34 +136,34 @@ private fun Root() {
     }
 }
 
-/** Left-hand menu of rounded pills: just icons until you move onto it, then it opens with names. */
+/** Left-hand menu: a slim strip of icons that opens with names when you move onto it. */
 @OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
 @Composable
 private fun Sidebar(tab: Tab, onSelect: (Tab) -> Unit, build: Int) {
     var expanded by androidx.compose.runtime.remember { mutableStateOf(false) }
-    val width by androidx.compose.animation.core.animateDpAsState(if (expanded) 250.dp else 84.dp, label = "sidebar")
+    val width by androidx.compose.animation.core.animateDpAsState(if (expanded) 232.dp else 76.dp, label = "sidebar")
     val requesters = androidx.compose.runtime.remember { Tab.entries.associateWith { FocusRequester() } }
     Box(
         Modifier.fillMaxHeight().width(width)
-            .background(
-                if (expanded) Brush.horizontalGradient(0f to C.Bg.copy(alpha = 0.97f), 0.75f to C.Bg.copy(alpha = 0.88f), 1f to Color.Transparent)
-                else Brush.horizontalGradient(0f to C.Bg.copy(alpha = 0.55f), 1f to Color.Transparent),
-            )
+            .background(C.Rail)
             .onFocusChanged { expanded = it.hasFocus }
             .focusProperties { enter = { requesters[tab] ?: FocusRequester.Default } }
             .focusGroup(),
     ) {
-        Column(Modifier.fillMaxHeight().padding(start = 16.dp, top = 18.dp, bottom = 12.dp, end = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Box(Modifier.height(26.dp)) {
+        Column(Modifier.fillMaxHeight().padding(start = 12.dp, top = 18.dp, bottom = 12.dp, end = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Box(Modifier.height(30.dp).padding(start = 6.dp), contentAlignment = Alignment.CenterStart) {
                 if (expanded) androidx.compose.foundation.Image(
                     painter = androidx.compose.ui.res.painterResource(app.sideline.tv.R.drawable.logo_wordmark),
-                    contentDescription = "Cooper TV", modifier = Modifier.height(24.dp),
-                )
+                    contentDescription = "Cooper TV", modifier = Modifier.height(22.dp),
+                ) else Box(Modifier.size(28.dp).background(C.Accent, RoundedCornerShape(7.dp)), contentAlignment = Alignment.Center) {
+                    Text("C", color = C.OnAccent, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                }
             }
+            Spacer(Modifier.height(6.dp))
             Tab.entries.forEach { t -> SideItem(t, t == tab, expanded, requesters.getValue(t)) { onSelect(t) } }
             Spacer(Modifier.weight(1f))
             Text(if (expanded) "Cooper TV · build $build" else "b$build", color = C.Faint, fontSize = 11.sp, maxLines = 1,
-                modifier = Modifier.padding(start = 6.dp))
+                modifier = Modifier.padding(start = 8.dp))
         }
     }
 }
@@ -169,19 +171,54 @@ private fun Sidebar(tab: Tab, onSelect: (Tab) -> Unit, build: Int) {
 @Composable
 private fun SideItem(t: Tab, selected: Boolean, expanded: Boolean, r: FocusRequester, onClick: () -> Unit) {
     FocusCard(
-        onClick = onClick, shape = RoundedCornerShape(50), scaleOnFocus = 1.04f,
-        modifier = Modifier.focusRequester(r).height(46.dp).let { if (expanded) it.fillMaxWidth() else it.width(46.dp) },
+        onClick = onClick, shape = RoundedCornerShape(10.dp), scaleOnFocus = 1f,
+        modifier = Modifier.focusRequester(r).height(44.dp).fillMaxWidth(),
     ) { f ->
-        Box(Modifier.matchParentSize().background(when { selected -> C.Accent; f -> C.Surface2; else -> C.Glass }))
+        // Selected = accent outline and accent text on a faint accent wash; selected-and-highlighted = white text.
+        Box(
+            Modifier.matchParentSize()
+                .background(when { f -> C.Surface2; selected -> C.Accent.copy(alpha = 0.14f); else -> C.Rail })
+                .border(if (selected) 1.5.dp else 0.dp, if (selected) C.Accent else Color.Transparent, RoundedCornerShape(10.dp)),
+        )
         Row(
-            Modifier.fillMaxSize().padding(horizontal = if (expanded) 16.dp else 0.dp),
+            Modifier.fillMaxSize().padding(horizontal = if (expanded) 14.dp else 0.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = if (expanded) Arrangement.Start else Arrangement.Center,
         ) {
-            androidx.compose.material3.Icon(t.icon, contentDescription = t.label, tint = if (selected) C.OnAccent else C.Text, modifier = Modifier.size(22.dp))
+            val tint = when { f -> C.Text; selected -> C.Accent; else -> C.Muted }
+            androidx.compose.material3.Icon(t.icon, contentDescription = t.label, tint = tint, modifier = Modifier.size(21.dp))
             if (expanded) {
                 Spacer(Modifier.width(14.dp))
-                Text(t.label, color = if (selected) C.OnAccent else C.Text, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                Text(t.label, color = tint, fontSize = 16.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium, maxLines = 1,
+                    modifier = Modifier.weight(1f))
+                if (selected) Box(Modifier.size(5.dp).background(C.Accent, androidx.compose.foundation.shape.CircleShape))
+            }
+        }
+    }
+}
+
+/** Thin bar along the bottom with the remote keys for the current screen. */
+@Composable
+private fun HintBar(tab: Tab) {
+    val hints = when (tab) {
+        Tab.Home -> listOf("←↑↓→" to "Move", "OK" to "Play / open", "≡" to "Options", "Back" to "Home")
+        Tab.Search -> listOf("OK" to "Type / open", "←↑↓→" to "Move", "Back" to "Home")
+        Tab.Live -> listOf("←↑↓→" to "Move", "OK" to "Play", "≡" to "Favourite / rename / hide", "Back" to "Home")
+        Tab.Movies, Tab.Series -> listOf("←↑↓→" to "Move", "OK" to "Details", "≡" to "Options", "Back" to "Home")
+        Tab.Sports -> listOf("←↑↓→" to "Move", "OK" to "Game details", "≡" to "Pop-ups on/off", "Back" to "Home")
+        Tab.Discover -> listOf("←↑↓→" to "Move", "OK" to "Open", "Back" to "Home")
+        Tab.Settings -> listOf("←↑↓→" to "Move", "OK" to "Change", "Back" to "Home")
+    }
+    Row(
+        Modifier.background(C.Bg.copy(alpha = 0.92f), RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp)).padding(horizontal = 14.dp, vertical = 5.dp),
+        horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically,
+    ) {
+        hints.forEach { (k, v) ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(k, color = C.Text, fontSize = 11.sp, fontWeight = FontWeight.Bold,
+                    modifier = Modifier.background(C.Surface2, RoundedCornerShape(4.dp)).padding(horizontal = 5.dp, vertical = 1.dp))
+                Spacer(Modifier.width(5.dp))
+                Text(v, color = C.Muted, fontSize = 11.sp)
             }
         }
     }

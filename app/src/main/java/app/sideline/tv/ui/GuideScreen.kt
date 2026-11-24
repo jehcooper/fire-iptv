@@ -64,17 +64,22 @@ fun ProgramGuide(channels: List<Channel>) {
     LaunchedEffect(Unit) { while (true) { delay(60_000); tick = System.currentTimeMillis() / 1000 } }
 
     Column(Modifier.fillMaxSize()) {
-        // Details of the focused programme.
-        Column(Modifier.fillMaxWidth().height(92.dp).clip(RoundedCornerShape(12.dp)).background(C.Surface).padding(horizontal = 16.dp, vertical = 10.dp)) {
-            val f = focused
-            if (f?.second == null) {
-                Text(f?.first?.name ?: "Move through the guide to see what's on. OK: on now → watch · earlier → catch-up · later → reminder.",
-                    color = C.Muted, fontSize = 14.sp, maxLines = 2)
-            } else {
-                val p = f.second!!
-                Text("${f.first.name}  ·  ${timeOf(p.start * 1000)} – ${timeOf(p.end * 1000)}", color = C.Accent, fontSize = 13.sp, maxLines = 1)
-                Text(p.title, color = C.Text, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
-                if (p.description.isNotBlank()) Text(p.description, color = C.Muted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        // Top: live preview of the highlighted channel, and the highlighted programme's details.
+        Row(Modifier.fillMaxWidth().height(126.dp)) {
+            LivePreview(focused?.first, Modifier.width(224.dp).fillMaxHeight())
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(12.dp)).background(C.Surface).padding(horizontal = 18.dp, vertical = 12.dp)) {
+                val f = focused
+                if (f?.second == null) {
+                    Text(f?.first?.name ?: "TV guide", color = C.Text, fontSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                    Text("OK: on now → watch · earlier → catch-up (⟲) · later → reminder 🔔", color = C.Muted, fontSize = 13.sp, maxLines = 2)
+                } else {
+                    val p = f.second!!
+                    Text(p.title, color = C.Text, fontSize = 19.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text("${f.first.name}  ·  ${timeOf(p.start * 1000)} – ${timeOf(p.end * 1000)}", color = C.Muted, fontSize = 13.sp, maxLines = 1)
+                    if (p.description.isNotBlank()) Text(p.description, color = C.Muted, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(top = 4.dp))
+                }
             }
         }
         Spacer(Modifier.height(8.dp))
@@ -86,10 +91,11 @@ fun ProgramGuide(channels: List<Channel>) {
             Column {
                 // Time ruler with paging.
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.height(40.dp)) {
-                    Row(Modifier.width(chanW), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Chip("◀", false, onClick = { windowStart -= 3600 })
-                        Chip("Now", false, onClick = { val n = System.currentTimeMillis() / 1000; windowStart = n - n % 1800 })
-                        Chip("▶", false, onClick = { windowStart += 3600 })
+                    Row(Modifier.width(chanW), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(java.text.SimpleDateFormat("EEE d MMM", java.util.Locale.getDefault()).format(java.util.Date(windowStart * 1000)).uppercase(),
+                            color = C.Muted, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                        Chip("◀", false, onClick = { windowStart -= 3600 }, compact = true)
+                        Chip("▶", false, onClick = { windowStart += 3600 }, compact = true)
                     }
                     Spacer(Modifier.width(8.dp))
                     Box(Modifier.width(gridW)) {
@@ -110,7 +116,11 @@ fun ProgramGuide(channels: List<Channel>) {
             // "Now" line.
             val nowX = chanW + 8.dp + perSec * (tick - windowStart).toFloat()
             if (tick in windowStart..(windowStart + windowLen)) {
-                Box(Modifier.offset(x = nowX, y = 40.dp).width(2.dp).fillMaxHeight().background(C.Live.copy(alpha = 0.8f)))
+                Box(Modifier.offset(x = nowX, y = 34.dp).width(2.dp).fillMaxHeight().background(C.Accent.copy(alpha = 0.85f)))
+                // "NOW 12:25" pill on the time ruler (OK on it jumps back to now).
+                Text("NOW ${timeOf(tick * 1000)}", color = C.OnAccent, fontSize = 11.sp, fontWeight = FontWeight.Bold,
+                    modifier = Modifier.offset(x = nowX - 40.dp, y = 8.dp).clip(RoundedCornerShape(50)).background(C.Accent)
+                        .padding(horizontal = 8.dp, vertical = 3.dp))
             }
         }
     }
@@ -164,14 +174,19 @@ private fun GuideRow(
                 ) { f ->
                     Box(Modifier.fillMaxSize().background(when {
                         f -> C.Surface2
-                        airing -> Color(0xFF16323A)
+                        airing -> C.Accent.copy(alpha = 0.16f)
                         else -> C.Surface
                     }).padding(horizontal = 8.dp), contentAlignment = Alignment.CenterStart) {
-                        Text(
-                            slot.item?.title ?: "No information",
-                            color = if (past && !f) C.Faint else if (slot.item == null) C.Faint else C.Text,
-                            fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
-                        )
+                        Column {
+                            Text(
+                                slot.item?.title ?: "No information",
+                                color = if (past && !f) C.Faint else if (slot.item == null) C.Faint else C.Text,
+                                fontSize = 13.sp, fontWeight = if (airing || f) FontWeight.SemiBold else FontWeight.Normal,
+                                maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            )
+                            if (slot.item != null && w > 90.dp) Text("${timeOf(slot.item.start * 1000)} – ${timeOf(slot.item.end * 1000)}",
+                                color = C.Faint, fontSize = 11.sp, maxLines = 1)
+                        }
                         if (past && c.hasArchive) Text("⟲", color = C.Gold, fontSize = 11.sp, modifier = Modifier.align(Alignment.TopEnd))
                         if (slot.item != null && slot.item.start in reminderStarts) Text("🔔", fontSize = 10.sp, modifier = Modifier.align(Alignment.TopEnd))
                     }

@@ -130,23 +130,39 @@ object TmdbApi {
                 .ifEmpty { if (!year.isNullOrBlank()) Tmdb.get(path, q(false))?.get("results").arr()?.mapNotNull { it.obj() }.orEmpty() else emptyList() }
             val want = Discover.norm(name)
             val best = hits.firstOrNull { Discover.norm(it.s("title") ?: it.s("name") ?: "") == want } ?: hits.firstOrNull()
-            img(best?.s("poster_path"), "w500")?.let { savePoster("${if (isTv) "tv" else "m"}|$name|$year", it) }
+            img(best?.s("poster_path"), "w500")?.let {
+                savePoster("${if (isTv) "tv" else "m"}|$name|$year", it, best?.get("genre_ids").arr()?.mapNotNull { g -> g.s() }?.joinToString(",") ?: "")
+            }
             (best?.s("id") ?: "").also { ids[ck] = it }.ifBlank { null }
         } catch (e: Exception) { null }
     }
 
     // ---- Sharper posters for your library (kept on disk so each title is looked up once) ----
     private val posters = java.util.concurrent.ConcurrentHashMap<String, String>()
+    private val posterGenres = java.util.concurrent.ConcurrentHashMap<String, String>()
     @Volatile private var postersLoaded = false
     private fun posterFile() = java.io.File(Net.cacheDir ?: java.io.File("/tmp"), "tmdb_posters.txt")
     private fun loadPosters() {
         if (postersLoaded) return
         postersLoaded = true
-        try { posterFile().takeIf { it.exists() }?.forEachLine { l -> l.split('\t').takeIf { it.size == 2 }?.let { posters[it[0]] = it[1] } } } catch (_: Exception) {}
+        try {
+            posterFile().takeIf { it.exists() }?.forEachLine { l ->
+                val f = l.split('\t')
+                if (f.size >= 2) { posters[f[0]] = f[1]; if (f.size >= 3 && f[2].isNotBlank()) posterGenres[f[0]] = f[2] }
+            }
+        } catch (_: Exception) {}
     }
-    private fun savePoster(key: String, url: String) {
+    private fun savePoster(key: String, url: String, genres: String = "") {
         loadPosters()
-        if (posters.put(key, url) == null) try { posterFile().appendText("$key\t$url\n") } catch (_: Exception) {}
+        if (genres.isNotBlank()) posterGenres[key] = genres
+        if (posters.put(key, url) == null) try { posterFile().appendText("$key\t$url\t$genres\n") } catch (_: Exception) {}
+    }
+    /** Genre names (e.g. "Sci-Fi") for a library title once it has been matched; empty until then. */
+    fun cachedGenres(name: String, year: String?, isTv: Boolean): List<String> {
+        loadPosters()
+        val ids = posterGenres["${if (isTv) "tv" else "m"}|$name|$year"]?.split(',') ?: return emptyList()
+        val g = genreCache ?: return emptyList()
+        return ids.mapNotNull { id -> g.firstOrNull { it.id == id && it.isTv == isTv }?.name ?: g.firstOrNull { it.id == id }?.name }
     }
     /** TMDB poster already known for a library title (no network). */
     fun cachedPoster(name: String, year: String?, isTv: Boolean): String? { loadPosters(); return posters["${if (isTv) "tv" else "m"}|$name|$year"] }

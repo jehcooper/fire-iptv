@@ -62,12 +62,17 @@ fun CategoryItem(
     modifier: Modifier = Modifier, onClick: () -> Unit,
 ) {
     // Ordinary categories open as you move over them; special entries (guide, search) need an OK press.
-    FocusCard(onClick = onClick, onFocus = if (selectOnFocus) onClick else null, onMenu = onMenu, modifier = modifier.fillMaxWidth(), scaleOnFocus = 1.02f, shape = RoundedCornerShape(10.dp)) { f ->
-        Text(
-            name, color = if (selected || f) C.Text else C.Muted, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-            modifier = Modifier.background(if (selected && !f) C.Surface2 else androidx.compose.ui.graphics.Color.Transparent).padding(horizontal = 12.dp, vertical = 7.dp).fillMaxWidth(),
-        )
+    // Name on the left, count on the right; the open category is shown in the accent colour.
+    val m = remember(name) { Regex("^(.*?)\\s*\\((\\d+)\\)\\s*$").find(name) }
+    val label = m?.groupValues?.get(1) ?: name
+    val count = m?.groupValues?.get(2)
+    FocusCard(onClick = onClick, onFocus = if (selectOnFocus) onClick else null, onMenu = onMenu, modifier = modifier.fillMaxWidth(), scaleOnFocus = 1.0f, shape = RoundedCornerShape(10.dp)) { f ->
+        Box(Modifier.matchParentSize().background(when { f -> C.Surface2; selected -> C.Accent.copy(alpha = 0.14f); else -> C.Bg }))
+        androidx.compose.foundation.layout.Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(label, color = when { f -> C.Text; selected -> C.Accent; else -> C.Muted }, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                fontWeight = if (selected || f) FontWeight.Bold else FontWeight.Medium, modifier = Modifier.weight(1f))
+            if (count != null) Text(count, color = C.Faint, fontSize = 12.sp, modifier = Modifier.padding(start = 8.dp))
+        }
     }
 }
 
@@ -161,18 +166,18 @@ fun LiveScreen() {
 
     Row(Modifier.fillMaxSize().padding(start = 48.dp, end = 48.dp, top = 4.dp)) {
         LazyColumn(Modifier.width(270.dp), verticalArrangement = Arrangement.spacedBy(3.dp), contentPadding = PaddingValues(start = 8.dp, top = 8.dp, end = 8.dp, bottom = 60.dp)) {
-            item { CategoryItem("📺 TV guide view", false, selectOnFocus = false) { guide = true } }
+            item { CategoryItem("TV guide view", false, selectOnFocus = false) { guide = true } }
             item {
                 // OK always opens the search window (with the last search filled in);
                 // ▶ goes straight to the search bar on the right.
-                CategoryItem("🔍 Search", selected == SEARCH, selectOnFocus = false,
+                CategoryItem("Search", selected == SEARCH, selectOnFocus = false,
                     modifier = Modifier.focusProperties { if (selected == SEARCH) right = searchBar }) {
                     selected = SEARCH
                     searching = true
                 }
             }
-            item { CategoryItem("★ Favourites (${favs.size})", selected == FAV) { selected = FAV } }
-            item { CategoryItem("⟲ Recent (${recent.size})", selected == RECENT) { selected = RECENT } }
+            item { CategoryItem("Favourites (${favs.size})", selected == FAV) { selected = FAV } }
+            item { CategoryItem("Recent (${recent.size})", selected == RECENT) { selected = RECENT } }
             items(cats, key = { "${it.accountId}:${it.id}" }) { c ->
                 CategoryItem(catLabel(c), selected == "${c.accountId}:${c.id}", onMenu = {
                     Confirm.ask("Hide \"${c.name}\"?", "You can show it again in Settings → Show or hide categories.", "Hide", destructive = true) {

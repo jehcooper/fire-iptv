@@ -139,6 +139,21 @@ class Prefs(context: Context) {
     fun setGuideUrl(v: String) { _guideUrl.value = v.trim(); sp.edit().putString("guideUrl", v.trim()).apply() }
 
     /** How see-through the player's side panels are, 0–100 % in steps of 5 (0 = solid). */
+    /** Your watchlist: "vod:<acc:id>" for movies, "series:<acc:seriesId>" for series (newest first). */
+    private val _watchlist = MutableStateFlow((sp.getString("watchlist", "") ?: "").split(',').filter { it.isNotBlank() })
+    val watchlist: StateFlow<List<String>> = _watchlist
+    fun toggleWatchlist(key: String) {
+        val l = if (key in _watchlist.value) _watchlist.value - key else listOf(key) + _watchlist.value
+        _watchlist.value = l
+        sp.edit().putString("watchlist", l.joinToString(",")).apply()
+    }
+    private val _theme = MutableStateFlow(sp.getString("theme", "teal") ?: "teal")
+    /** Colour scheme id (see ui.Themes). */
+    val theme: StateFlow<String> = _theme
+    fun setTheme(id: String) {
+        _theme.value = id; sp.edit().putString("theme", id).apply()
+        app.sideline.tv.ui.Themes.set(id)
+    }
     private val _popupTransparency = MutableStateFlow(sp.getInt("popupTransparency", 10))
     /** How see-through score pop-ups are, 0–100 in steps of 5. */
     val popupTransparency: StateFlow<Int> = _popupTransparency

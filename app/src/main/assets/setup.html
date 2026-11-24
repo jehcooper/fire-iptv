@@ -2,35 +2,35 @@
 <title>Cooper TV setup</title>
 <style>
 *{box-sizing:border-box}
-body{margin:0;font-family:-apple-system,Segoe UI,Roboto,sans-serif;background:#2a2c47;color:#e8eef3}
-header{position:sticky;top:0;background:#2a2c47;z-index:5;padding:14px 16px 0;border-bottom:1px solid #4e5279}
+body{margin:0;font-family:-apple-system,Segoe UI,Roboto,sans-serif;background:#121519;color:#e8eef3}
+header{position:sticky;top:0;background:#121519;z-index:5;padding:14px 16px 0;border-bottom:1px solid #282d36}
 h1{font-size:22px;margin:0}h1 span{color:#ffffff;font-weight:300}
 nav{display:flex;gap:6px;overflow-x:auto;padding:10px 0;scrollbar-width:none}
-nav button{flex:none;background:#3a3d60;color:#e8eef3;border:0;border-radius:999px;padding:9px 14px;font-size:14px}
-nav button.on{background:#f7f5ff;color:#2a2c47;font-weight:700}
+nav button{flex:none;background:#1c2027;color:#e8eef3;border:0;border-radius:999px;padding:9px 14px;font-size:14px}
+nav button.on{background:#31b9d9;color:#121519;font-weight:700}
 main{max-width:720px;margin:0 auto;padding:14px 16px 120px}
-.card{background:#3a3d60;border-radius:14px;padding:14px;margin:12px 0}
+.card{background:#1c2027;border-radius:14px;padding:14px;margin:12px 0}
 h2{font-size:18px;margin:4px 0 8px}h3{font-size:15px;margin:10px 0 6px;color:#ffffff}
-p,.hint{color:#c3c5e0;font-size:13px;line-height:1.45;margin:4px 0}
-label{display:block;font-size:13px;color:#c3c5e0;margin:8px 0 3px}
-input[type=text],input[type=password],input[type=url],input[type=search],select{width:100%;background:#2a2c47;color:#e8eef3;border:1px solid #5f6388;border-radius:10px;padding:10px;font-size:15px}
+p,.hint{color:#a3abb8;font-size:13px;line-height:1.45;margin:4px 0}
+label{display:block;font-size:13px;color:#a3abb8;margin:8px 0 3px}
+input[type=text],input[type=password],input[type=url],input[type=search],select{width:100%;background:#121519;color:#e8eef3;border:1px solid #3a414d;border-radius:10px;padding:10px;font-size:15px}
 .row{display:flex;gap:8px;align-items:center}
 .row>*{flex:1}
 .chk{display:flex;align-items:center;gap:8px;padding:7px 0;font-size:15px;color:#e8eef3}
 .chk input{width:20px;height:20px;flex:none}
-.btn{background:#f7f5ff;color:#2a2c47;font-weight:700;border:0;border-radius:999px;padding:11px 20px;font-size:15px;cursor:pointer}
-.btn.sec{background:#4e5279;color:#e8eef3}.btn.warn{background:#ff4d5e;color:#fff}.btn.small{padding:6px 12px;font-size:13px}
-.savebar{position:fixed;left:0;right:0;bottom:0;background:#2a2c47ee;border-top:1px solid #4e5279;padding:12px 16px;display:flex;gap:10px;align-items:center;justify-content:center}
+.btn{background:#31b9d9;color:#121519;font-weight:700;border:0;border-radius:999px;padding:11px 20px;font-size:15px;cursor:pointer}
+.btn.sec{background:#282d36;color:#e8eef3}.btn.warn{background:#ff4d5e;color:#fff}.btn.small{padding:6px 12px;font-size:13px}
+.savebar{position:fixed;left:0;right:0;bottom:0;background:#121519ee;border-top:1px solid #282d36;padding:12px 16px;display:flex;gap:10px;align-items:center;justify-content:center}
 #msg{color:#ffc94d;font-size:14px}
-.ch{display:flex;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid #4e5279}
+.ch{display:flex;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid #282d36}
 .ch input[type=text]{padding:7px;font-size:14px}
-.ch .cat{font-size:11px;color:#c3c5e0}
+.ch .cat{font-size:11px;color:#a3abb8}
 .star{background:none;border:0;font-size:22px;color:#4b5a68;width:34px}.star.on{color:#ffc94d}
-.pill{display:inline-block;font-size:11px;background:#4e5279;border-radius:6px;padding:2px 6px;color:#c3c5e0;margin-left:6px}
-.teams{max-height:320px;overflow:auto;border:1px solid #4e5279;border-radius:10px;padding:4px 10px;margin-top:6px}
+.pill{display:inline-block;font-size:11px;background:#282d36;border-radius:6px;padding:2px 6px;color:#a3abb8;margin-left:6px}
+.teams{max-height:320px;overflow:auto;border:1px solid #282d36;border-radius:10px;padding:4px 10px;margin-top:6px}
 .hide{display:none}
 </style></head><body>
-<header><h1>COOPER <span>TV</span> <span style="font-size:14px;color:#c3c5e0">setup</span></h1>
+<header><h1>COOPER <span>TV</span> <span style="font-size:14px;color:#a3abb8">setup</span></h1>
 <nav id="tabs"></nav></header>
 <main id="main"><p>Loading your settings from the TV…</p></main>
 <div class="savebar"><button class="btn" id="save">Save this page</button><span id="msg"></span></div>
@@ -153,7 +153,7 @@ function rKeys(){
    <label>API key</label><input type="text" id="osKey" value="${esc(k.osKey)}" autocapitalize="off">
    <div class="row"><div><label>Username</label><input type="text" id="osUser" value="${esc(k.osUser)}" autocapitalize="off"></div>
    <div><label>Password</label><input type="text" id="osPass" value="${esc(k.osPass)}" autocapitalize="off"></div></div></div>
-  <div class="card"><h2>Trakt</h2><p>Create a free app at <a style="color:#c3c5e0" href="https://trakt.tv/oauth/applications/new" target="_blank">trakt.tv → Your API Apps → New application</a>.
+  <div class="card"><h2>Trakt</h2><p>Create a free app at <a style="color:#a3abb8" href="https://trakt.tv/oauth/applications/new" target="_blank">trakt.tv → Your API Apps → New application</a>.
    Name: Cooper TV · Redirect URI: <b>urn:ietf:wg:oauth:2.0:oob</b>. Paste its Client ID and Client Secret here, Save, then on the TV choose Settings → Trakt → Connect Trakt.</p>
    <label>Client ID</label><input type="text" id="traktId" value="${esc(k.traktId)}" autocapitalize="off">
    <label>Client Secret</label><input type="text" id="traktSecret" value="${esc(k.traktSecret)}" autocapitalize="off"></div>`;
@@ -172,7 +172,8 @@ function rGuide(){
 /* ---------- Display ---------- */
 function rDisplay(){
   const d=S.display;
-  $('#main').innerHTML=`<div class="card"><h2>Player panels</h2><label>See-through: <b id="ptv">${d.panelTransparency}%</b> (0% = solid)</label>
+  $('#main').innerHTML=`<div class="card"><h2>Theme</h2><select id="theme">${(d.themes||[]).map(t=>`<option value="${t.id}" ${t.id==d.theme?'selected':''}>${esc(t.name)}</option>`).join('')}</select></div>
+  <div class="card"><h2>Player panels</h2><label>See-through: <b id="ptv">${d.panelTransparency}%</b> (0% = solid)</label>
    <input type="range" id="pt" min="0" max="100" step="5" value="${d.panelTransparency}" style="width:100%" oninput="$('#ptv').textContent=this.value+'%'"></div>
   <div class="card"><h2>Score pop-ups</h2><label>See-through: <b id="pptv">${d.popupTransparency}%</b> (0% = solid)</label>
    <input type="range" id="ppt" min="0" max="100" step="5" value="${d.popupTransparency}" style="width:100%" oninput="$('#pptv').textContent=this.value+'%'"></div>
@@ -196,7 +197,7 @@ function collect(){
     case 'categories': return {hidden:[...S.catHidden]};
     case 'keys': return {tmdb:$('#tmdb').value.trim(),omdb:$('#omdb').value.trim(),osKey:$('#osKey').value.trim(),osUser:$('#osUser').value.trim(),osPass:$('#osPass').value,traktId:$('#traktId').value.trim(),traktSecret:$('#traktSecret').value.trim()};
     case 'guide': return {source:(document.querySelector('[name=gs]:checked')||{}).value||'full',url:$('#gurl').value.trim()};
-    case 'display': {const d={panelTransparency:+$('#pt').value,popupTransparency:+$('#ppt').value,spoilerFree:$('#spoil').checked,autoFollowTeams:$('#auto').checked,subsOn:$('#subs').checked,subsLang:$('#lang').value.trim()};S.display=d;return d}
+    case 'display': {const d={theme:($('#theme')||{}).value,themes:S.display.themes,panelTransparency:+$('#pt').value,popupTransparency:+$('#ppt').value,spoilerFree:$('#spoil').checked,autoFollowTeams:$('#auto').checked,subsOn:$('#subs').checked,subsLang:$('#lang').value.trim()};S.display=d;return d}
   }
 }
 $('#save').onclick=async()=>{

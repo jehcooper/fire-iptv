@@ -50,6 +50,8 @@ object PhoneSetup {
             putJsonObject("display") {
                 put("panelTransparency", prefs.panelTransparency.value)
                 put("popupTransparency", prefs.popupTransparency.value)
+                put("theme", prefs.theme.value)
+                putJsonArray("themes") { app.sideline.tv.ui.Themes.all.forEach { t -> addJsonObject { put("id", t.id); put("name", t.name) } } }
                 put("spoilerFree", prefs.spoilerFree.value)
                 put("autoFollowTeams", prefs.autoFollowTeams.value)
                 put("subsOn", prefs.subsOn.value)
@@ -126,6 +128,7 @@ object PhoneSetup {
             }
             "display" -> {
                 prefs.setPanelTransparency((d["panelTransparency"] as? JsonPrimitive)?.intOrNull ?: prefs.panelTransparency.value)
+                d.str("theme").takeIf { it.isNotBlank() }?.let { prefs.setTheme(it) }
                 prefs.setPopupTransparency((d["popupTransparency"] as? JsonPrimitive)?.intOrNull ?: prefs.popupTransparency.value)
                 prefs.setSpoilerFree(d.bool("spoilerFree"))
                 prefs.setAutoFollowTeams(d.bool("autoFollowTeams"))

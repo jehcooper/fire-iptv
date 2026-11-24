@@ -315,6 +315,17 @@ fun SettingsScreen() {
 
         item {
             Column {
+                SectionTitle("Theme")
+                val cur by prefs.theme.collectAsState()
+                Text("Colour scheme for the whole app. Midnight teal is the default; Lavender is the previous look.", color = C.Muted, fontSize = 14.sp)
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 12.dp)) {
+                    items(Themes.all, key = { it.id }) { t -> ThemeCard(t, t.id == cur) { prefs.setTheme(t.id) } }
+                }
+            }
+        }
+
+        item {
+            Column {
                 SectionTitle("Player panels")
                 val t by prefs.panelTransparency.collectAsState()
                 Text("How see-through the channel list, games and subtitle panels are while something plays.", color = C.Muted, fontSize = 14.sp)
@@ -882,6 +893,24 @@ private fun TraktLoginDialog(onDone: () -> Unit) {
                     }
                 }
                 Chip(if (result != null) "Done" else "Cancel", result != null, onClick = onDone, modifier = Modifier.focusRequester(close))
+            }
+        }
+    }
+}
+
+/** A small preview of a theme: its background, a panel, and its accent colour on a button and outline. */
+@Composable
+private fun ThemeCard(t: Palette, selected: Boolean, onClick: () -> Unit) {
+    FocusCard(onClick = onClick, modifier = Modifier.width(150.dp), shape = RoundedCornerShape(12.dp), scaleOnFocus = 1.05f) { _ ->
+        Column(Modifier.background(Color(t.bg)).padding(10.dp)) {
+            Box(Modifier.fillMaxWidth().height(54.dp).clip(RoundedCornerShape(8.dp)).background(Color(t.surface))
+                .border(2.dp, Color(t.accent), RoundedCornerShape(8.dp)), contentAlignment = Alignment.BottomStart) {
+                Text("Resume", color = Color(t.onAccent), fontSize = 10.sp, fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(6.dp).clip(RoundedCornerShape(50)).background(Color(t.accent)).padding(horizontal = 8.dp, vertical = 2.dp))
+            }
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
+                Text(t.name, color = Color(t.text), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f), maxLines = 1)
+                if (selected) Text("✓", color = Color(t.accent), fontSize = 15.sp, fontWeight = FontWeight.Bold)
             }
         }
     }

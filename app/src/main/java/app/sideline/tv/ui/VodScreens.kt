@@ -38,6 +38,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -64,6 +65,7 @@ private const val FIND = "__search"
 private const val EVERYTHING = "__everything"
 private const val CONTINUE = "__continue"
 private const val FEATURED = "__featured"
+private const val WATCHLIST = "__watchlist"
 
 @Composable
 private fun <T> VodBrowser(
@@ -98,7 +100,10 @@ private fun <T> VodBrowser(
     }
 
     // Worked out off the main thread so the remote stays responsive with big libraries; search waits for a pause in typing.
-    val shown by produceState(initialValue = emptyList<T>(), selected, query, visibleAll) {
+    LaunchedEffect(Unit) { if (app.sideline.tv.data.Tmdb.configured) app.sideline.tv.data.TmdbApi.genres() }
+    val watch by prefs.watchlist.collectAsState()
+    val watchCount = remember(watch) { watch.count { it.startsWith("$kind:") } }
+    val shown by produceState(initialValue = emptyList<T>(), selected, query, visibleAll, watch) {
         if (selected == FIND) delay(250)
         value = withContext(Dispatchers.Default) {
             when (selected) {
@@ -106,6 +111,7 @@ private fun <T> VodBrowser(
                 EVERYTHING -> visibleAll.sortedBy { nameOf(it).lowercase() }
                 FIND -> if (query.length < 2) emptyList() else visibleAll.asSequence().filter { nameOf(it).contains(query, ignoreCase = true) }.take(300).toList()
                 CONTINUE, FEATURED -> emptyList()
+                WATCHLIST -> watch.mapNotNull { k -> visibleAll.firstOrNull { "$kind:${keyOf(it)}" == k } }
                 else -> all.filter { catOf(it) == selected }
             }
         }
@@ -114,13 +120,14 @@ private fun <T> VodBrowser(
         onSearch = { query = it; selected = FIND; searching = false }, onDismiss = { searching = false })
 
     Row(Modifier.fillMaxSize().padding(start = 48.dp, end = 32.dp, top = 8.dp)) {
-        LazyColumn(Modifier.width(280.dp), verticalArrangement = Arrangement.spacedBy(4.dp), contentPadding = PaddingValues(start = 8.dp, top = 8.dp, end = 8.dp, bottom = 60.dp)) {
-            if (featured != null) item { CategoryItem("✨ Featured", selected == FEATURED) { selected = FEATURED } }
-            if (continueItems.isNotEmpty()) item { CategoryItem("▶ Continue watching  (${continueItems.size})", selected == CONTINUE) { selected = CONTINUE } }
+        LazyColumn(Modifier.width(232.dp), verticalArrangement = Arrangement.spacedBy(2.dp), contentPadding = PaddingValues(start = 8.dp, top = 8.dp, end = 8.dp, bottom = 60.dp)) {
+            if (featured != null) item { CategoryItem("Featured", selected == FEATURED) { selected = FEATURED } }
+            if (continueItems.isNotEmpty()) item { CategoryItem("Continue watching  (${continueItems.size})", selected == CONTINUE) { selected = CONTINUE } }
+            item { CategoryItem("Watchlist  ($watchCount)", selected == WATCHLIST) { selected = WATCHLIST } }
             item {
                 // OK always opens the search window (with the last search filled in);
                 // ▶ goes straight to the search bar on the right.
-                CategoryItem("🔍 Search", selected == FIND, selectOnFocus = false,
+                CategoryItem("Search", selected == FIND, selectOnFocus = false,
                     modifier = Modifier.focusProperties { if (selected == FIND) right = searchBar }) {
                     selected = FIND
                     searching = true
@@ -137,7 +144,7 @@ private fun <T> VodBrowser(
                 }) { selected = k }
             }
             item {
-                Text("Menu (≡) on a category hides it. Bring hidden ones back in Settings.", color = C.Faint, fontSize = 12.sp,
+                Text(if (kind == "vod") "≡ on a category hides it · ≡ on a movie adds it to your Watchlist." else "≡ on a category hides it · ≡ on a series stars it · \"+ Watchlist\" is on each series page.", color = C.Faint, fontSize = 12.sp,
                     modifier = Modifier.padding(10.dp))
             }
         }
@@ -161,12 +168,15 @@ private fun <T> VodBrowser(
             } else {
                 androidx.compose.runtime.CompositionLocalProvider(LocalPosterFill provides true) {
                     LazyVerticalGrid(
-                        columns = GridCells.Fixed(3),
-                        horizontalArrangement = Arrangement.spacedBy(18.dp),
-                        verticalArrangement = Arrangement.spacedBy(20.dp),
+                        columns = GridCells.Fixed(4),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(18.dp),
                         contentPadding = PaddingValues(12.dp, 10.dp, 12.dp, 60.dp),
                     ) {
-                        items(shown, key = keyOf) { tile(it) }
+                        if (selected == WATCHLIST && shown.isEmpty()) item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
+                        Text("Your watchlist is empty. Press ≡ on any title, or \"+ Watchlist\" on its page, to save it for later.", color = C.Muted, fontSize = 15.sp)
+                    }
+                    items(shown, key = keyOf) { tile(it) }
                     }
                 }
             }
@@ -177,20 +187,49 @@ private fun <T> VodBrowser(
 /** A started movie or episode: image, how far in, and time left. Menu removes it from the list. */
 @Composable
 fun ProgressCard(p: ProgressEntry, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    FocusCard(onClick = onClick, onMenu = {
-        Confirm.ask("Remove \"${p.title}\" from Continue watching?", yes = "Remove", destructive = true) { SidelineApp.progress.remove(p.key) }
-    }, modifier = modifier.width(240.dp).height(150.dp)) { f ->
-        AsyncImage(model = p.image, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xF02A2C47)))))
-        Column(Modifier.align(Alignment.BottomStart).padding(10.dp)) {
-            Text(p.title, color = C.Text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (p.subtitle.isNotBlank()) Text(p.subtitle, color = C.Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text("${fmtTime((p.duration - p.position).coerceAtLeast(0))} left" + if (f) "  ·  ≡ remove" else "", color = C.Faint, fontSize = 11.sp)
-            Box(Modifier.padding(top = 4.dp).fillMaxWidth().height(3.dp).background(C.Surface2)) {
-                Box(Modifier.fillMaxWidth(p.fraction).height(3.dp).background(C.Accent))
+    // Wide picture (TMDB backdrop when found) with progress and ★ rating; title and time left underneath.
+    val art = rememberTmdbArt(p.title, p.kind == "episode")
+    var focused by remember { mutableStateOf(false) }
+    Column(modifier.width(250.dp)) {
+        FocusCard(onClick = onClick, onMenu = {
+            Confirm.ask("Remove \"${p.title}\" from Continue watching?", yes = "Remove", destructive = true) { SidelineApp.progress.remove(p.key) }
+        }, scaleOnFocus = 1.04f, shape = RoundedCornerShape(10.dp),
+            modifier = Modifier.fillMaxWidth().height(141.dp).onFocusChanged { focused = it.hasFocus }) { _ ->
+            AsyncImage(model = art?.backdrop ?: p.image, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+            art?.score?.let {
+                Text("★ %.1f".format(it), color = C.Text, fontSize = 11.sp, fontWeight = FontWeight.Bold,
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(start = 6.dp, end = 6.dp, bottom = 10.dp)
+                        .background(Color(0xCC0B0D10), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp))
+            }
+            Box(Modifier.align(Alignment.BottomStart).fillMaxWidth().height(4.dp).background(Color(0x66000000))) {
+                Box(Modifier.fillMaxWidth(p.fraction).fillMaxHeight().background(C.Accent))
             }
         }
+        Text(MovieInfoService.cleanTitle(p.title).first, color = if (focused) C.Accent else C.Text, fontSize = 15.sp,
+            fontWeight = if (focused) FontWeight.Bold else FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 8.dp, start = 2.dp))
+        val left = "${fmtLeft((p.duration - p.position).coerceAtLeast(0))} left"
+        Text(listOf(p.subtitle.takeIf { it.isNotBlank() }, left).filterNotNull().joinToString(" · ") + if (focused) "  ·  ≡ remove" else "",
+            color = C.Faint, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 2.dp))
     }
+}
+
+/** "1 h 12 min" / "17 min" for time left. */
+fun fmtLeft(ms: Long): String {
+    val m = (ms / 60_000).toInt()
+    return if (m >= 60) "${m / 60} h ${m % 60} min" else "$m min"
+}
+
+/** TMDB picture and score for a library title (looked up once, then cached). */
+@Composable
+fun rememberTmdbArt(rawTitle: String, isTv: Boolean): app.sideline.tv.data.TmdbApi.Details? {
+    val art by produceState<app.sideline.tv.data.TmdbApi.Details?>(null, rawTitle, isTv) {
+        if (!app.sideline.tv.data.Tmdb.configured || rawTitle.isBlank()) return@produceState
+        val (clean, year) = MovieInfoService.cleanTitle(rawTitle)
+        val id = app.sideline.tv.data.TmdbApi.findId(clean, year, isTv) ?: return@produceState
+        value = app.sideline.tv.data.TmdbApi.details(id, isTv)
+    }
+    return art
 }
 
 @Composable
@@ -205,7 +244,11 @@ fun MoviesScreen() {
         "vod", "No movies yet", cats, movies,
         catOf = { "${it.accountId}:${it.categoryId}" }, nameOf = { it.name }, keyOf = { it.key }, continueItems = cont,
         featured = if (app.sideline.tv.data.Tmdb.configured) ({ FeaturedMovies(movies) { open = it } }) else null,
-    ) { m -> PosterCard(m.name, m.poster, onClick = { open = m }, badge = m.rating?.takeIf { it != "0" && it.isNotBlank() }?.let { "★ ${it.take(3)}" }, kind = "movie") }
+    ) { m ->
+        val inList = "vod:${m.key}" in SidelineApp.prefs.watchlist.collectAsState().value
+        PosterCard(m.name, m.poster, onClick = { open = m }, badge = m.rating?.takeIf { it != "0" && it.isNotBlank() }?.let { "★ ${it.take(3)}" }, kind = "movie",
+            onMenu = { watchlistToggle("vod:${m.key}", m.name, inList) })
+    }
     open?.let { MovieSheet(it) { open = null } }
 }
 
@@ -466,4 +509,11 @@ private fun FeaturedSeries(series: List<Series>, onOpen: (Series) -> Unit) {
             }
         }
     }
+}
+
+/** Add/remove a title from the watchlist (with a quick confirmation). */
+fun watchlistToggle(key: String, name: String, inList: Boolean) {
+    val clean = MovieInfoService.cleanTitle(name).first
+    if (inList) Confirm.ask("Remove \"$clean\" from your Watchlist?", yes = "Remove", destructive = true) { SidelineApp.prefs.toggleWatchlist(key) }
+    else Confirm.ask("Add \"$clean\" to your Watchlist?", yes = "Add") { SidelineApp.prefs.toggleWatchlist(key) }
 }

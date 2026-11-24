@@ -130,7 +130,7 @@ fun Chip(text: String, selected: Boolean, onClick: () -> Unit, modifier: Modifie
                 .background(if (selected) C.Accent.copy(alpha = if (f) 1f else 0.85f) else Color.Transparent)
                 .padding(horizontal = if (compact) 13.dp else 18.dp, vertical = if (compact) 7.dp else 8.dp),
         ) {
-            Text(text, color = if (selected) C.Bg else C.Text, fontSize = if (compact) 14.sp else 15.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+            Text(text, color = if (selected) C.OnAccent else C.Text, fontSize = if (compact) 14.sp else 15.sp, fontWeight = FontWeight.Medium, maxLines = 1)
         }
     }
 }
@@ -253,18 +253,26 @@ private fun GridPoster(
         delay(450)   // only for tiles you stop on or scroll past slowly
         value = app.sideline.tv.data.TmdbApi.poster(clean.first, clean.second, kind == "series")
     }
+    val genres = remember(hq, clean) { if (kind != null) app.sideline.tv.data.TmdbApi.cachedGenres(clean.first, clean.second, kind == "series") else emptyList() }
     var focused by remember { mutableStateOf(false) }
     Column(modifier.fillMaxWidth()) {
-        FocusCard(onClick = onClick, onFocus = { focused = true; onFocus?.invoke() }, onMenu = onMenu,
+        FocusCard(onClick = onClick, onFocus = { focused = true; onFocus?.invoke() }, onMenu = onMenu, scaleOnFocus = 1.04f,
+            shape = RoundedCornerShape(10.dp),
             modifier = Modifier.fillMaxWidth().aspectRatio(2f / 3f).onFocusChanged { focused = it.hasFocus }) { _ ->
             AsyncImage(model = hq ?: image, contentDescription = null, placeholder = ColorPainter(C.Surface2),
                 contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+            // Rating in the bottom-right corner of the poster.
+            if (badge != null) Text(badge, color = if (badgeColor == C.Live) Color.White else C.Text, fontSize = 11.sp, fontWeight = FontWeight.Bold,
+                modifier = Modifier.align(Alignment.BottomEnd).padding(6.dp)
+                    .background(if (badgeColor == C.Live) C.Live else Color(0xCC0B0D10), RoundedCornerShape(6.dp))
+                    .padding(horizontal = 6.dp, vertical = 2.dp))
         }
-        Text(name, color = C.Text, fontSize = 14.sp, lineHeight = 18.sp, fontWeight = if (focused) FontWeight.Bold else FontWeight.SemiBold,
+        // Full title (wraps, never cut short), accent-coloured while selected; then year · genre.
+        Text(name, color = if (focused) C.Accent else C.Text, fontSize = 14.sp, lineHeight = 18.sp,
+            fontWeight = if (focused) FontWeight.Bold else FontWeight.Medium,
             modifier = Modifier.padding(top = 8.dp, start = 2.dp, end = 2.dp))
-        val meta = listOfNotNull(badge, year?.takeIf { badge?.contains(it) != true }).joinToString("  ·  ")
-        if (meta.isNotBlank()) Text(meta, color = if (badgeColor == C.Live) C.Live else C.Muted, fontSize = 12.sp,
-            modifier = Modifier.padding(top = 2.dp, start = 2.dp, end = 2.dp))
+        val meta = listOfNotNull(year, genres.firstOrNull()).joinToString(" · ")
+        if (meta.isNotBlank()) Text(meta, color = C.Faint, fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp, start = 2.dp, end = 2.dp))
     }
 }
 
