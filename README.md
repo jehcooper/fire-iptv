@@ -1,4 +1,4 @@
-# Cooper TV: IPTV + live sports for Fire TV
+# Empire TV: IPTV + live sports for Fire TV
 
 A personal IPTV player for Fire TV (Fire OS, Android-based models only). It doesn't work on Vega OS sticks.
 
@@ -14,7 +14,7 @@ A personal IPTV player for Fire TV (Fire OS, Android-based models only). It does
 1. Fire TV: Settings → My Fire TV → Developer options → Install unknown apps → turn on for **Downloader**.
    (If Developer options is hidden: Settings → My Fire TV → About → click the device name 7 times.)
 2. Install the free **Downloader** app from the Amazon Appstore.
-3. In Downloader, enter the APK link from this repo's latest release (see below), install, then open **Cooper TV**.
+3. In Downloader, enter the APK link from this repo's latest release (see below), install, then open **Empire TV**.
 
 Every push to `main` builds a new `Sideline.apk` (the file name is kept so the Downloader link stays the same) under **Releases**. Updates install over the old version and keep your settings.
 
