@@ -207,9 +207,12 @@ fun PosterCard(
     badgeColor: Color = C.Accent, badgeTextColor: Color = C.OnAccent,
     /** "movie" or "series" for your library items (lets the grid fetch TMDB's sharper poster). */
     kind: String? = null,
+    /** Line under the title; defaults to year · genre. */
+    meta: String? = null,
 ) {
-    if (LocalPosterFill.current && !wide) {
-        GridPoster(title, image, onClick, modifier, badge, onFocus, onMenu, badgeColor, kind)
+    // Every poster (grids and rows alike) is a clean picture with the title and year · genre underneath.
+    if (!wide) {
+        GridPoster(title, image, onClick, if (LocalPosterFill.current) modifier else modifier.width(150.dp), badge, onFocus, onMenu, badgeColor, kind, meta)
         return
     }
     val w = if (wide) 220.dp else 150.dp
@@ -242,7 +245,7 @@ fun PosterCard(
 @Composable
 private fun GridPoster(
     title: String, image: String?, onClick: () -> Unit, modifier: Modifier, badge: String?,
-    onFocus: (() -> Unit)?, onMenu: (() -> Unit)?, badgeColor: Color, kind: String?,
+    onFocus: (() -> Unit)?, onMenu: (() -> Unit)?, badgeColor: Color, kind: String?, metaOverride: String? = null,
 ) {
     val clean = remember(title) { app.sideline.tv.data.MovieInfoService.cleanTitle(title) }
     val hasYearInTitle = Regex("\\((19|20)\\d{2}\\)\\s*$").containsMatchIn(title)
@@ -271,7 +274,7 @@ private fun GridPoster(
         Text(name, color = if (focused) C.Accent else C.Text, fontSize = 14.sp, lineHeight = 18.sp,
             fontWeight = if (focused) FontWeight.Bold else FontWeight.Medium,
             modifier = Modifier.padding(top = 8.dp, start = 2.dp, end = 2.dp))
-        val meta = listOfNotNull(year, genres.firstOrNull()).joinToString(" · ")
+        val meta = metaOverride ?: listOfNotNull(year, genres.firstOrNull()).joinToString(" · ")
         if (meta.isNotBlank()) Text(meta, color = C.Faint, fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp, start = 2.dp, end = 2.dp))
     }
 }

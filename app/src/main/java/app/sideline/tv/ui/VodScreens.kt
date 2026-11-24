@@ -144,7 +144,7 @@ private fun <T> VodBrowser(
                 }) { selected = k }
             }
             item {
-                Text(if (kind == "vod") "≡ on a category hides it · ≡ on a movie adds it to your Watchlist." else "≡ on a category hides it · ≡ on a series stars it · \"+ Watchlist\" is on each series page.", color = C.Faint, fontSize = 12.sp,
+                Text(if (kind == "vod") "≡ on a category hides it · ≡ on a movie: trailer, watchlist, watched…" else "≡ on a category hides it · ≡ on a series: trailer, watchlist, favourite…", color = C.Faint, fontSize = 12.sp,
                     modifier = Modifier.padding(10.dp))
             }
         }
@@ -191,9 +191,7 @@ fun ProgressCard(p: ProgressEntry, onClick: () -> Unit, modifier: Modifier = Mod
     val art = rememberTmdbArt(p.title, p.kind == "episode")
     var focused by remember { mutableStateOf(false) }
     Column(modifier.width(250.dp)) {
-        FocusCard(onClick = onClick, onMenu = {
-            Confirm.ask("Remove \"${p.title}\" from Continue watching?", yes = "Remove", destructive = true) { SidelineApp.progress.remove(p.key) }
-        }, scaleOnFocus = 1.04f, shape = RoundedCornerShape(10.dp),
+        FocusCard(onClick = onClick, onMenu = { TitleOptions.show(OptTarget(progress = p)) }, scaleOnFocus = 1.04f, shape = RoundedCornerShape(10.dp),
             modifier = Modifier.fillMaxWidth().height(141.dp).onFocusChanged { focused = it.hasFocus }) { _ ->
             AsyncImage(model = art?.backdrop ?: p.image, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
             art?.score?.let {
@@ -209,7 +207,7 @@ fun ProgressCard(p: ProgressEntry, onClick: () -> Unit, modifier: Modifier = Mod
             fontWeight = if (focused) FontWeight.Bold else FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(top = 8.dp, start = 2.dp))
         val left = "${fmtLeft((p.duration - p.position).coerceAtLeast(0))} left"
-        Text(listOf(p.subtitle.takeIf { it.isNotBlank() }, left).filterNotNull().joinToString(" · ") + if (focused) "  ·  ≡ remove" else "",
+        Text(listOf(p.subtitle.takeIf { it.isNotBlank() }, left).filterNotNull().joinToString(" · ") + if (focused) "  ·  ≡ options" else "",
             color = C.Faint, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 2.dp))
     }
 }
@@ -247,7 +245,7 @@ fun MoviesScreen() {
     ) { m ->
         val inList = "vod:${m.key}" in SidelineApp.prefs.watchlist.collectAsState().value
         PosterCard(m.name, m.poster, onClick = { open = m }, badge = m.rating?.takeIf { it != "0" && it.isNotBlank() }?.let { "★ ${it.take(3)}" }, kind = "movie",
-            onMenu = { watchlistToggle("vod:${m.key}", m.name, inList) })
+            onMenu = { TitleOptions.show(OptTarget(movie = m)) })
     }
     open?.let { MovieSheet(it) { open = null } }
 }
@@ -428,10 +426,7 @@ fun SeriesTile(s: Series, onClick: () -> Unit, modifier: Modifier = Modifier) {
     PosterCard(
         (if (fav) "★ " else "") + s.name, s.cover, onClick = onClick, modifier = modifier,
         badge = ratingBadge(s.name, "series", s.rating), kind = "series",
-        onMenu = {
-            Confirm.ask(if (fav) "Remove ${s.name} from favourite series?" else "Add ${s.name} to favourite series?",
-                yes = if (fav) "Remove" else "Add", destructive = fav) { prefs.toggleFavSeries(key) }
-        },
+        onMenu = { TitleOptions.show(OptTarget(series = s)) },
     )
 }
 
@@ -463,8 +458,10 @@ private fun FeaturedMovies(movies: List<Movie>, onOpen: (Movie) -> Unit) {
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 24.dp, bottom = 12.dp)) {
                         items(row.items, key = { it.t.tmdbId }) { i ->
                             val m = i.movie ?: return@items
-                            PosterCard(m.name, m.poster ?: i.t.poster, onClick = { onOpen(m) },
-                                badge = i.t.score?.takeIf { it > 0 }?.let { "★ %.1f".format(it) })
+                            PosterCard(i.t.title, i.t.poster ?: m.poster, onClick = { onOpen(m) },
+                                onMenu = { TitleOptions.show(OptTarget(movie = m, tmdb = i.t)) },
+                                badge = i.t.score?.takeIf { it > 0 }?.let { "★ %.1f".format(it) },
+                                meta = listOfNotNull(i.t.year.takeIf { it.isNotBlank() }, app.sideline.tv.data.TmdbApi.genreNames(i.t).firstOrNull()).joinToString(" · "))
                         }
                     }
                 }
@@ -501,8 +498,10 @@ private fun FeaturedSeries(series: List<Series>, onOpen: (Series) -> Unit) {
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 24.dp, bottom = 12.dp)) {
                         items(row.items, key = { it.t.tmdbId }) { i ->
                             val sr = i.series ?: return@items
-                            PosterCard(sr.name, sr.cover ?: i.t.poster, onClick = { onOpen(sr) },
-                                badge = i.t.score?.takeIf { it > 0 }?.let { "★ %.1f".format(it) })
+                            PosterCard(i.t.title, i.t.poster ?: sr.cover, onClick = { onOpen(sr) },
+                                onMenu = { TitleOptions.show(OptTarget(series = sr, tmdb = i.t)) },
+                                badge = i.t.score?.takeIf { it > 0 }?.let { "★ %.1f".format(it) },
+                                meta = listOfNotNull(i.t.year.takeIf { it.isNotBlank() }, app.sideline.tv.data.TmdbApi.genreNames(i.t).firstOrNull()).joinToString(" · "))
                         }
                     }
                 }

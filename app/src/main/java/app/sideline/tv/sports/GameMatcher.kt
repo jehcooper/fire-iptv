@@ -36,6 +36,7 @@ object GameMatcher {
     private val _updates = MutableStateFlow(0)
     /** Bumps whenever new results land, so open screens can re-read [cached]. */
     val updates: StateFlow<Int> = _updates
+    private val cacheList = java.util.concurrent.ConcurrentHashMap<String, Int>()
     private val inFlight = java.util.Collections.synchronizedSet(mutableSetOf<String>())
 
     private val broadcastAliases = mapOf(
@@ -50,15 +51,47 @@ object GameMatcher {
         "fs2" to listOf("fs2", "fox sports 2"), "cbssn" to listOf("cbs sports network"),
     )
 
+    /** How a team can appear in a channel name or guide entry. */
+    private class TeamWords(val strong: List<String>, val nick: String?, val city: String?, val abbr: Regex?)
+
+    private fun teamWords(g: Game): List<TeamWords> = g.competitors.map { c ->
+        val full = c.name.lowercase().trim()
+        val nick = c.shortName.lowercase().trim().takeIf { it.length >= 3 && it != full }
+        val city = if (nick != null && full.endsWith(nick)) full.removeSuffix(nick).trim().takeIf { it.length >= 4 } else null
+        val ab = c.abbr.trim().takeIf { it.length in 2..4 }?.let { Regex("(^|[^a-z0-9])${Regex.escape(it.lowercase())}([^a-z0-9]|$)") }
+        TeamWords(listOf(full).filter { it.length >= 4 }, nick, city, ab)
+    }
+
+    /** Old simple terms (full + short name), still used for TV-guide text. */
     private fun teamTerms(g: Game): List<List<String>> = g.competitors.map { c ->
         listOf(c.shortName, c.name).map { it.lowercase().trim() }.filter { it.length >= 4 }.distinct()
     }
 
+    /** Your categories for this game's league ("NHL", "NHL Centre Ice", "Hockey"…), then general sports ones. */
+    private fun categoriesFor(game: Game, repo: Repository): Pair<Set<String>, Set<String>> {
+        val league = Leagues.byId(game.leagueId)
+        val words = (league?.keywords ?: emptyList()) + listOfNotNull(league?.tag?.lowercase())
+        val leagueCats = HashSet<String>(); val sportCats = HashSet<String>()
+        repo.liveCategories.value.forEach { cat ->
+            val n = " " + cat.name.lowercase().replace(Regex("[^a-z0-9+]+"), " ") + " "
+            val k = cat.accountId + ":" + cat.id
+            if (words.any { w -> n.contains(" ${w.lowercase()} ") || n.contains(" ${w.lowercase()}") && w.length >= 4 }) leagueCats += k
+            else if (n.contains("sport") || n.contains(" ppv") || n.contains("event")) sportCats += k
+        }
+        return leagueCats to sportCats
+    }
+
     fun cached(gameId: String): List<ChannelMatch>? = cache[gameId]?.second
 
-    /** Instant: channel names + broadcasters, no network. Safe to call for many games. */
+    /**
+     * Instant: channel names + broadcasters, no network. Safe to call for many games.
+     * Both teams named (nickname, full name, or, inside the league's own categories, city or abbreviation)
+     * → strongest. One team only counts if it's the full name ("Ottawa Senators"), so look-alikes such as
+     * "Belleville Senators" don't show up.
+     */
     suspend fun quick(game: Game, repo: Repository): List<ChannelMatch> = withContext(Dispatchers.Default) {
-        val terms = teamTerms(game)
+        val teams = teamWords(game)
+        val (leagueCats, sportCats) = categoriesFor(game, repo)
         val lower = repo.lowerNames
         val norm = repo.normNames
         val best = HashMap<String, ChannelMatch>()
@@ -67,10 +100,22 @@ object GameMatcher {
             val cand = m() ?: return
             if (cur == null || cand.tier < cur.tier) best[key] = cand
         }
-        if (terms.isNotEmpty()) for ((key, n) in lower) {
-            val hits = terms.count { t -> t.any { n.contains(it) } }
-            if (hits > 0) offer(key) {
-                repo.channel(key)?.let { ChannelMatch(it, if (hits >= 2) MatchTier.NAME_BOTH else MatchTier.NAME_ONE, "Channel name mentions the team${if (hits >= 2) "s" else ""}") }
+        if (teams.isNotEmpty()) for ((key, n) in lower) {
+            val ch = repo.channel(key) ?: continue
+            val cat = ch.accountId + ":" + ch.categoryId
+            val inLeague = cat in leagueCats
+            val inSports = inLeague || cat in sportCats
+            var strongHits = 0; var anyHits = 0
+            teams.forEach { t ->
+                val strong = t.strong.any { n.contains(it) }
+                val loose = strong || (t.nick != null && n.contains(t.nick)) ||
+                    (inLeague && ((t.city != null && n.contains(t.city)) || (t.abbr?.containsMatchIn(n) == true)))
+                if (strong) strongHits++
+                if (loose) anyHits++
+            }
+            when {
+                anyHits >= 2 -> offer(key) { ChannelMatch(ch, MatchTier.NAME_BOTH, "Channel name mentions both teams" + if (inLeague) " (league category)" else "") }
+                strongHits >= 1 && inSports -> offer(key) { ChannelMatch(ch, MatchTier.NAME_ONE, "Channel name mentions the team") }
             }
         }
         val wanted = game.broadcasts.map { b -> b to (broadcastAliases[b.lowercase().trim()] ?: listOf(b.lowercase().trim())) }
@@ -78,22 +123,24 @@ object GameMatcher {
             val hit = wanted.firstOrNull { (_, ws) -> ws.any { w -> n == w || n.startsWith("$w ") || n.contains(" $w ") || n.endsWith(" $w") } }
             if (hit != null) offer(key) { repo.channel(key)?.let { ChannelMatch(it, MatchTier.BROADCASTER, "Listed broadcaster: ${hit.first}") } }
         }
-        best.values.sortedWith(compareBy({ it.tier }, { it.channel.name.length })).take(25)
+        best.values.sortedWith(compareBy({ it.tier }, { if ((it.channel.accountId + ":" + it.channel.categoryId) in leagueCats) 0 else 1 }, { it.channel.name.length })).take(25)
     }
 
-    /** Full search: quick results + TV-guide check on likely channels. Cached for 10 minutes. */
+    /**
+     * Full search: quick results + the TV guide of every channel in the league's own categories
+     * (then general sports categories). Cached for 10 minutes, or until the channel list changes.
+     */
     suspend fun full(game: Game, repo: Repository): List<ChannelMatch> {
-        cache[game.id]?.let { (t, r) -> if (System.currentTimeMillis() - t < 10 * 60_000) return r }
+        val listId = System.identityHashCode(repo.channels.value)
+        cache[game.id]?.let { (t, r) -> if (System.currentTimeMillis() - t < 10 * 60_000 && cacheList[game.id] == listId) return r }
         val q = quick(game, repo)
-        val league = Leagues.byId(game.leagueId)
         val terms = teamTerms(game)
-        val sportCats = repo.liveCategories.value.filter { cat ->
-            val n = cat.name.lowercase()
-            (league?.keywords ?: emptyList()).any { n.contains(it) } || n.contains("sport")
-        }.map { it.accountId + ":" + it.id }.toSet()
-        val candidates = (q.filter { it.tier != MatchTier.NAME_BOTH }.map { it.channel } +
-            repo.channels.value.filter { (it.accountId + ":" + it.categoryId) in sportCats }.take(40))
-            .distinctBy { it.key }.take(50)
+        val (leagueCats, sportCats) = categoriesFor(game, repo)
+        val all = repo.channels.value
+        val candidates = (all.filter { (it.accountId + ":" + it.categoryId) in leagueCats }.take(150) +
+            q.filter { it.tier != MatchTier.NAME_BOTH }.map { it.channel } +
+            all.filter { (it.accountId + ":" + it.categoryId) in sportCats }.take(60))
+            .distinctBy { it.key }.take(200)
 
         val windowStart = (game.startMillis / 1000) - 3 * 3600
         val windowEnd = (game.startMillis / 1000) + 4 * 3600
@@ -102,11 +149,13 @@ object GameMatcher {
             candidates.map { c ->
                 async(Dispatchers.IO) {
                     gate.withPermit {
-                        val hit = repo.epgCached(c).firstOrNull { item ->
-                            val inWindow = game.startMillis == 0L || (item.end >= windowStart && item.start <= windowEnd)
-                            val text = (item.title + " " + item.description).lowercase()
-                            inWindow && terms.any { t -> t.any { text.contains(it) } }
-                        }
+                        val hit = try {
+                            repo.epgCached(c).firstOrNull { item ->
+                                val inWindow = game.startMillis == 0L || (item.end >= windowStart && item.start <= windowEnd)
+                                val text = (item.title + " " + item.description).lowercase()
+                                inWindow && terms.any { t -> t.any { text.contains(it) } }
+                            }
+                        } catch (_: Exception) { null }
                         if (hit != null) ChannelMatch(c, MatchTier.GUIDE, "TV guide: \"${hit.title}\"") else null
                     }
                 }
@@ -117,8 +166,10 @@ object GameMatcher {
             val cur = merged[m.channel.key]
             if (cur == null || m.tier < cur.tier) merged[m.channel.key] = m
         }
-        val result = merged.values.sortedWith(compareBy({ it.tier }, { it.channel.name.length })).take(20)
+        val result = merged.values.sortedWith(compareBy({ it.tier },
+            { if ((it.channel.accountId + ":" + it.channel.categoryId) in leagueCats) 0 else 1 }, { it.channel.name.length })).take(20)
         cache[game.id] = System.currentTimeMillis() to result
+        cacheList[game.id] = listId
         _updates.value = _updates.value + 1
         return result
     }

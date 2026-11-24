@@ -57,7 +57,7 @@ fun HomeScreen(goTo: (Tab) -> Unit) {
 
     if (accounts.isEmpty()) {
         Column(Modifier.fillMaxSize()) {
-            EmptyState("Welcome to Cooper TV", "Add your IPTV logins in Settings to get started.")
+            EmptyState("Welcome to Empire TV", "Add your IPTV logins in Settings to get started.")
             Chip("Open Settings", selected = true, onClick = { goTo(Tab.Settings) }, modifier = Modifier.padding(start = 48.dp))
         }
         return
@@ -133,8 +133,8 @@ fun HomeScreen(goTo: (Tab) -> Unit) {
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 12.dp)) {
                     items(watchItems, key = { (if (it is Movie) "m" else "s") + it.hashCode() }) { x ->
                         when (x) {
-                            is Movie -> PosterCard(x.name, x.poster, onClick = { Pages.movie(x) })
-                            is Series -> PosterCard(x.name, x.cover, onClick = { Pages.series(x) })
+                            is Movie -> PosterCard(x.name, x.poster, onClick = { Pages.movie(x) }, kind = "movie", onMenu = { TitleOptions.show(OptTarget(movie = x)) })
+                            is Series -> PosterCard(x.name, x.cover, onClick = { Pages.series(x) }, kind = "series", onMenu = { TitleOptions.show(OptTarget(series = x)) })
                         }
                     }
                 }
@@ -177,7 +177,7 @@ fun HomeScreen(goTo: (Tab) -> Unit) {
             Column {
                 SectionTitle("Latest movie releases")
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 12.dp)) {
-                    items(latestMovies, key = { it.key }) { m -> PosterCard(m.name, m.poster, onClick = { openMovie = m }) }
+                    items(latestMovies, key = { it.key }) { m -> PosterCard(m.name, m.poster, onClick = { openMovie = m }, kind = "movie", onMenu = { TitleOptions.show(OptTarget(movie = m)) }) }
                 }
             }
         }

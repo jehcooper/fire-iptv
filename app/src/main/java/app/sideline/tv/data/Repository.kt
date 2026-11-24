@@ -103,8 +103,44 @@ class Repository(private val prefs: Prefs) {
     /** True when there's nothing to browse yet (first start, or no saved copy). */
     val nothingLoaded: Boolean get() = channels.value.isEmpty() && movies.value.isEmpty() && series.value.isEmpty()
 
+    private val _status = MutableStateFlow<Map<String, AccountStatus>>(emptyMap())
+    /** Login check per account (expiry date, connections), refreshed each time the app starts or reloads. */
+    val accountStatus: StateFlow<Map<String, AccountStatus>> = _status
+    @Volatile private var statusAt = 0L
+    fun checkAccounts(force: Boolean = false) {
+        if (!force && System.currentTimeMillis() - statusAt < 30 * 60_000) return
+        statusAt = System.currentTimeMillis()
+        scope.launch {
+            prefs.accounts.value.forEach { a ->
+                val st = try { XtreamClient(a).login() } catch (e: Exception) { null } ?: return@forEach
+                _status.value = _status.value + (a.id to st)
+            }
+        }
+    }
+
+    /** Live channel list only, re-downloaded when older than [maxAgeMs] (event channels are renamed daily). */
+    @Volatile private var liveAt = 0L
+    fun refreshLiveIfOlder(maxAgeMs: Long) {
+        if (_loading.value || System.currentTimeMillis() - liveAt < maxAgeMs) return
+        liveAt = System.currentTimeMillis()
+        // Quietly re-download just the live channel lists (fast; movies and series are left alone).
+        scope.launch {
+            val res = prefs.accounts.value.filter { it.useLive }.mapNotNull { a ->
+                try { val c = client(a.id) ?: return@mapNotNull null; c.liveCategories(false) to c.liveStreams(false) } catch (e: Exception) { null }
+            }
+            val chans = res.flatMap { it.second }
+            if (chans.isNotEmpty()) {
+                liveCategories.value = res.flatMap { it.first }
+                rawChannels = chans
+                applyEdits()
+            }
+        }
+    }
+
     fun refresh() {
         if (_loading.value) return
+        liveAt = System.currentTimeMillis()
+        checkAccounts(force = true)
         _loading.value = true
         scope.launch {
             // Saved copy first (instant), then the provider's latest.

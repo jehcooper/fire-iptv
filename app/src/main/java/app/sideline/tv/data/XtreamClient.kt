@@ -65,6 +65,8 @@ class XtreamClient(val account: Account) {
                 expires = exp,
                 maxConnections = ui.i("max_connections"),
                 formats = formats,
+                expiresAt = ui.l("exp_date")?.takeIf { it > 0 }?.times(1000),
+                activeConnections = ui.i("active_cons"),
             )
         }
     } catch (e: Exception) {

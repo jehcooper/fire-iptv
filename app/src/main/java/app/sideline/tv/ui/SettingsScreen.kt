@@ -1,5 +1,6 @@
 package app.sideline.tv.ui
 
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -84,6 +85,8 @@ fun SettingsScreen() {
     var editGuideUrl by remember { mutableStateOf(false) }
     var backupOpen by remember { mutableStateOf(false) }
     var phoneOpen by remember { mutableStateOf(false) }
+    val status by SidelineApp.repo.accountStatus.collectAsState()
+    LaunchedEffect(Unit) { SidelineApp.repo.checkAccounts() }
     var speedTest by remember { mutableStateOf(false) }
     var leagueOptsFor by remember { mutableStateOf<String?>(null) }
     val omdbKey by prefs.omdbKey.collectAsState()
@@ -110,12 +113,18 @@ fun SettingsScreen() {
                 Spacer(Modifier.height(12.dp))
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 12.dp)) {
                     items(accounts, key = { it.id }) { a ->
-                        FocusCard(onClick = { editing = a }, modifier = Modifier.width(280.dp).height(110.dp)) { _ ->
+                        val st = status[a.id]
+                        FocusCard(onClick = { editing = a }, modifier = Modifier.width(300.dp).heightIn(min = 136.dp)) { _ ->
                             Column(Modifier.padding(16.dp)) {
                                 Text(a.name, color = C.Text, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
                                 Text(listOfNotNull(if (a.useLive) "Live channels" else null, if (a.useVod) "Movies & series" else null).joinToString(" + "),
                                     color = C.Accent, fontSize = 13.sp)
                                 Text(a.server.removePrefix("http://").removePrefix("https://"), color = C.Faint, fontSize = 12.sp, maxLines = 1)
+                                // Expiry from the provider: yellow within 7 days, red once expired.
+                                val (line, col) = expiryLine(st)
+                                Text(line, color = col, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 6.dp))
+                                if (st?.maxConnections != null) Text("${st.activeConnections ?: 0} of ${st.maxConnections} connections in use",
+                                    color = C.Faint, fontSize = 12.sp)
                             }
                         }
                     }
@@ -262,7 +271,7 @@ fun SettingsScreen() {
                 Text("Keep track of what you watch on trakt.tv. Only titles you switch \"Sync to Trakt\" on (on each movie or series page) are synced: " +
                     "watching now, watched episodes/movies (from about 80% through), and your ratings. Episodes you watched elsewhere show ✓ here.",
                     color = C.Muted, fontSize = 14.sp)
-                Text("One-time setup: on a computer or phone, sign in at trakt.tv → Settings → Your API Apps → New application. Name: Cooper TV. " +
+                Text("One-time setup: on a computer or phone, sign in at trakt.tv → Settings → Your API Apps → New application. Name: Empire TV. " +
                     "Redirect URI: urn:ietf:wg:oauth:2.0:oob. Save, then copy the Client ID and Client Secret here (easiest with \"Set up from phone\").",
                     color = C.Faint, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp))
                 Spacer(Modifier.height(8.dp))
@@ -271,7 +280,7 @@ fun SettingsScreen() {
                     Chip(if (secret.isBlank()) "Add Client Secret" else "Client Secret ✓", false, onClick = { editTraktSecret = true })
                     if (token.isBlank()) Chip("Connect Trakt", cid.isNotBlank() && secret.isNotBlank(), onClick = { traktLogin = true })
                     else Chip("Disconnect ${user.ifBlank { "Trakt" }}", false, onClick = {
-                        Confirm.ask("Disconnect Trakt?", "Nothing is deleted on Trakt; Cooper TV just stops syncing.", "Disconnect", destructive = true) { app.sideline.tv.data.Trakt.signOut() }
+                        Confirm.ask("Disconnect Trakt?", "Nothing is deleted on Trakt; Empire TV just stops syncing.", "Disconnect", destructive = true) { app.sideline.tv.data.Trakt.signOut() }
                     })
                 }
                 if (token.isNotBlank()) Text("Connected" + (if (user.isNotBlank()) " as $user" else "") + " · ${prefs.traktSync.collectAsState().value.size} titles syncing",
@@ -384,7 +393,7 @@ fun SettingsScreen() {
                     SidelineApp.repo.catchupAvailable -> "Yes. ${channels.count { it.hasArchive }} channels support catch-up (look for the CATCH-UP tag)"
                     else -> "No. Your live provider doesn't offer catch-up"
                 }
-                Text("Cooper TV build ${buildNumber(androidx.compose.ui.platform.LocalContext.current)}", color = C.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                Text("Empire TV build ${buildNumber(androidx.compose.ui.platform.LocalContext.current)}", color = C.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                 Text("Catch-up: $catchup", color = C.Muted, fontSize = 14.sp)
                 Text("Scores come from ESPN's public feed. It's unofficial and may change.", color = C.Faint, fontSize = 13.sp)
                 Spacer(Modifier.height(10.dp))
@@ -403,9 +412,9 @@ fun SettingsScreen() {
         "TMDB API key or Read Access Token", prefs.tmdbKey.value, { prefs.setTmdbKey(it) },
     ) { editTmdb = false }
     if (backupOpen) BackupDialog { backupOpen = false }
-    if (editTraktId) KeyEditor("Trakt Client ID", "From trakt.tv → Settings → Your API Apps → Cooper TV.", "Client ID",
+    if (editTraktId) KeyEditor("Trakt Client ID", "From trakt.tv → Settings → Your API Apps → Empire TV.", "Client ID",
         prefs.traktClientId.value, { prefs.setTraktApp(it, prefs.traktSecret.value) }) { editTraktId = false }
-    if (editTraktSecret) KeyEditor("Trakt Client Secret", "From trakt.tv → Settings → Your API Apps → Cooper TV.", "Client Secret",
+    if (editTraktSecret) KeyEditor("Trakt Client Secret", "From trakt.tv → Settings → Your API Apps → Empire TV.", "Client Secret",
         prefs.traktSecret.value, { prefs.setTraktApp(prefs.traktClientId.value, it) }) { editTraktSecret = false }
     if (traktLogin) TraktLoginDialog { traktLogin = false }
     if (phoneOpen) BackupDialog(setup = true) { phoneOpen = false }
@@ -741,7 +750,7 @@ private fun BackupDialog(setup: Boolean = false, onDone: () -> Unit) {
                     }
                     Text(if (setup) "Each page there has its own Save button; changes show on the TV straight away. " +
                         "The page only works while this screen is open, and shows your logins, so only open it on your own phone."
-                        else "There you can download a backup file, or upload one to restore (which restarts Cooper TV). " +
+                        else "There you can download a backup file, or upload one to restore (which restarts Empire TV). " +
                         "The page only works while this screen is open.", color = C.Muted, fontSize = 14.sp)
                     if (status.isNotBlank()) Text(status, color = C.Gold, fontSize = 15.sp)
                 }
@@ -913,5 +922,21 @@ private fun ThemeCard(t: Palette, selected: Boolean, onClick: () -> Unit) {
                 if (selected) Text("✓", color = Color(t.accent), fontSize = 15.sp, fontWeight = FontWeight.Bold)
             }
         }
+    }
+}
+
+/** "Expires 14 Dec 2026 · 20 days left" and its colour (normal / yellow within 7 days / red when expired). */
+@Composable
+fun expiryLine(st: app.sideline.tv.data.AccountStatus?): Pair<String, Color> {
+    if (st == null) return "Checking expiry date…" to C.Faint
+    if (!st.ok && st.expiresAt == null) return st.message to C.Live
+    val at = st.expiresAt ?: return "No expiry date given" to C.Muted
+    val days = Math.floorDiv(at - System.currentTimeMillis(), 86_400_000L)
+    val date = java.text.SimpleDateFormat("d MMM yyyy", java.util.Locale.getDefault()).format(java.util.Date(at))
+    return when {
+        at < System.currentTimeMillis() -> "Expired $date" to C.Live
+        days < 1 -> "Expires today ($date)" to C.Gold
+        days <= 7 -> "Expires $date · $days day${if (days == 1L) "" else "s"} left" to C.Gold
+        else -> "Expires $date · $days days left" to C.Muted
     }
 }

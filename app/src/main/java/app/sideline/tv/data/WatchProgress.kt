@@ -68,6 +68,15 @@ class WatchProgress(context: Context) {
     private val _done = MutableStateFlow(sp.getStringSet("done", emptySet())!!.toSet())
     /** Keys of movies/episodes you watched to the end (for ✓ marks). */
     val done: StateFlow<Set<String>> = _done
+    /** Mark watched (also leaves Continue watching) or unwatched, by hand. */
+    fun setDone(key: String, done: Boolean) {
+        if (done) { markDone(key); remove(key) }
+        else if (key in _done.value) {
+            val d = _done.value - key
+            _done.value = d
+            sp.edit().putStringSet("done", d).apply()
+        }
+    }
     private fun markDone(key: String) {
         if (key in _done.value) return
         val d = (_done.value + key).let { if (it.size > 3000) it.drop(it.size - 3000).toSet() else it }

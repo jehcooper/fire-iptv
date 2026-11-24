@@ -138,9 +138,9 @@ fun SearchScreen() {
                                 when (x) { is app.sideline.tv.data.Movie -> "m" + x.key; is app.sideline.tv.data.Series -> "s${x.accountId}:${x.seriesId}"; else -> x.hashCode() }
                             }) { x ->
                                 when (x) {
-                                    is app.sideline.tv.data.Movie -> PosterCard(x.name, x.poster, onClick = { Pages.movie(x) },
+                                    is app.sideline.tv.data.Movie -> PosterCard(x.name, x.poster, onClick = { Pages.movie(x) }, kind = "movie", onMenu = { TitleOptions.show(OptTarget(movie = x)) },
                                         badge = "▶", badgeColor = C.Live, badgeTextColor = androidx.compose.ui.graphics.Color.White)
-                                    is app.sideline.tv.data.Series -> PosterCard(x.name, x.cover, onClick = { Pages.series(x) },
+                                    is app.sideline.tv.data.Series -> PosterCard(x.name, x.cover, onClick = { Pages.series(x) }, kind = "series", onMenu = { TitleOptions.show(OptTarget(series = x)) },
                                         badge = "▶ Series", badgeColor = C.Live, badgeTextColor = androidx.compose.ui.graphics.Color.White)
                                 }
                             }

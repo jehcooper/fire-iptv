@@ -79,7 +79,7 @@ fun DiscoverScreen(goTo: (Tab) -> Unit) {
             Text(
                 "Discover shows trending, new, popular and top-rated movies and series, matched against your own library so you can press Play. " +
                     "The lists come from TMDB (The Movie Database), which needs a free key: sign up at themoviedb.org, then Settings → API. " +
-                    "Add it in Cooper TV under Settings → Movie & series info.",
+                    "Add it in Empire TV under Settings → Movie & series info.",
                 color = C.Muted, fontSize = 16.sp, modifier = Modifier.padding(top = 10.dp, bottom = 20.dp).width(820.dp),
             )
             Chip("Open Settings", true, onClick = { goTo(Tab.Settings) })
@@ -128,7 +128,10 @@ fun DiscoverScreen(goTo: (Tab) -> Unit) {
                         PosterCard(
                             i.t.title, i.movie?.poster?.takeIf { i.t.poster == null } ?: i.t.poster,
                             onClick = { open(i) },
-                            badge = if (!i.playable) "Not in library" else i.t.score?.takeIf { it > 0 }?.let { "★ %.1f".format(it) },
+                            onMenu = { TitleOptions.show(OptTarget(movie = i.movie, series = i.series, tmdb = i.t)) },
+                            badge = i.t.score?.takeIf { it > 0 }?.let { "★ %.1f".format(it) },
+                            meta = listOfNotNull(i.t.year.takeIf { it.isNotBlank() }, app.sideline.tv.data.TmdbApi.genreNames(i.t).firstOrNull(),
+                                if (!i.playable) "Not in library" else null).joinToString(" · "),
                         )
                     }
                 }

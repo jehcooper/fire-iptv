@@ -41,7 +41,7 @@ object Backup {
 
     fun export(ctx: Context): String {
         val root = buildJsonObject {
-            put("app", "Cooper TV")
+            put("app", "Empire TV")
             put("format", 1)
             put("created", System.currentTimeMillis())
             putJsonObject("prefs") {
@@ -67,10 +67,10 @@ object Backup {
         return root.toString()
     }
 
-    /** Replaces the current setup with the backup. Throws with a readable message if the file isn't a Cooper TV backup. */
+    /** Replaces the current setup with the backup. Throws with a readable message if the file isn't a Empire TV backup. */
     fun import(ctx: Context, text: String) {
-        val root = try { Net.json.parseToJsonElement(text).jsonObject } catch (e: Exception) { throw IllegalArgumentException("That isn't a Cooper TV backup file") }
-        if (root["prefs"] !is JsonObject) throw IllegalArgumentException("That isn't a Cooper TV backup file")
+        val root = try { Net.json.parseToJsonElement(text).jsonObject } catch (e: Exception) { throw IllegalArgumentException("That isn't a Empire TV backup file") }
+        if (root["prefs"] !is JsonObject) throw IllegalArgumentException("That isn't a Empire TV backup file")
         val prefs = root["prefs"]!!.jsonObject
         for (name in FILES) {
             val data = prefs[name] as? JsonObject ?: continue
@@ -196,7 +196,7 @@ object Backup {
                 while (read < len) { val n = input.read(body, read, len - read); if (n < 0) break; read += n }
                 try {
                     import(ctx, String(body, 0, read, Charsets.UTF_8))
-                    respond(out, 200, "text/plain", "Restored. Cooper TV is restarting on the TV.".toByteArray())
+                    respond(out, 200, "text/plain", "Restored. Empire TV is restarting on the TV.".toByteArray())
                     _status.value = "Restored. Restarting…"
                     Thread.sleep(1200)
                     restartApp(ctx)
@@ -228,7 +228,7 @@ object Backup {
     }
 
     private const val PAGE = """<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Cooper TV backup</title>
+<title>Empire TV backup</title>
 <style>
 body{margin:0;font-family:-apple-system,Segoe UI,Roboto,sans-serif;background:#0b0f14;color:#e8eef3;display:flex;justify-content:center}
 main{max-width:520px;padding:32px 20px}
@@ -241,7 +241,7 @@ button.warn{background:#ff4d5e;color:#fff}
 input{margin:10px 0;color:#e8eef3}
 </style></head><body><main>
 <h1>COOPER <span>TV</span></h1>
-<p>Backup & restore for the Cooper TV app on your Fire TV.</p>
+<p>Backup & restore for the Empire TV app on your Fire TV.</p>
 <div class="card"><h3>Download a backup</h3>
 <p>Saves your accounts, favourites, hidden and renamed channels, teams, reminders, progress and keys. It includes your logins, so keep the file private.</p>
 <a class="btn" href="cooper-tv-backup.json" download>Download backup</a></div>

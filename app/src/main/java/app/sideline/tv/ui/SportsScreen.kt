@@ -130,6 +130,8 @@ fun SportsScreen(goTo: (Tab) -> Unit) {
     LaunchedEffect(focusedId) { delay(350); if (focusedId != null) shownId = focusedId }
 
     BackHandler(enabled = tables != null) { tables = null }
+    // Event channels ("NHL 03: Flames at Senators") are renamed daily, so use a fresh channel list.
+    LaunchedEffect(Unit) { SidelineApp.repo.refreshLiveIfOlder(60 * 60_000L) }
 
     val all = remember(board) { board.values.flatten().distinctBy { it.id } }
     // League tables give each team's position "(3)"; downloaded in the background, cached 15 minutes.

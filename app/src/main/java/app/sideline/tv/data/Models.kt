@@ -27,6 +27,9 @@ data class AccountStatus(
     val expires: String? = null,
     val maxConnections: Int? = null,
     val formats: List<String> = emptyList(),
+    /** Expiry as epoch millis (null = provider gave none). */
+    val expiresAt: Long? = null,
+    val activeConnections: Int? = null,
 )
 
 data class Category(val accountId: String, val id: String, val name: String)

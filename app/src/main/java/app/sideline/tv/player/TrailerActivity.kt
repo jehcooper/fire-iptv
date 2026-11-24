@@ -18,7 +18,7 @@ import android.widget.TextView
 import android.widget.Toast
 
 /**
- * Full-screen YouTube trailer inside Cooper TV (TMDB only stores YouTube links).
+ * Full-screen YouTube trailer inside Empire TV (TMDB only stores YouTube links).
  * Remote: OK / ⏯ pause-play, ◀ ▶ back/forward 10 s, ▲▼ next/previous trailer, Back closes.
  */
 class TrailerActivity : Activity() {

@@ -60,13 +60,22 @@ enum class Tab(val label: String, val icon: ImageVector) {
 /** Full-screen picture behind everything (Home's "For you" banner sets it). */
 object Backdrop { val url = mutableStateOf<String?>(null) }
 
-/** This app's build number (the one in "Cooper TV build N"). */
+/** This app's build number (the one in "Empire TV build N"). */
 @Suppress("DEPRECATION")
 fun buildNumber(ctx: android.content.Context): Int = try {
     ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionCode
 } catch (e: Exception) { 0 }
 
+/** Bumped each time the app comes to the front (for the renewal reminder). */
+object AppOpens { val count = mutableStateOf(0) }
+
 class MainActivity : ComponentActivity() {
+    override fun onStart() {
+        super.onStart()
+        AppOpens.count.value += 1
+        SidelineApp.repo.checkAccounts(force = true)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent { SidelineTheme { Root() } }
@@ -130,9 +139,11 @@ private fun Root() {
         ReminderHost()
         ChannelMenuHost()
         PagesHost()
+        TitleOptionsHost()
         LoadingDialog()
         ConfirmHost()
         UpdateBanner(build)
+        ExpiryReminder()
     }
 }
 
@@ -154,15 +165,16 @@ private fun Sidebar(tab: Tab, onSelect: (Tab) -> Unit, build: Int) {
             Box(Modifier.height(30.dp).padding(start = 6.dp), contentAlignment = Alignment.CenterStart) {
                 if (expanded) androidx.compose.foundation.Image(
                     painter = androidx.compose.ui.res.painterResource(app.sideline.tv.R.drawable.logo_wordmark),
-                    contentDescription = "Cooper TV", modifier = Modifier.height(22.dp),
-                ) else Box(Modifier.size(28.dp).background(C.Accent, RoundedCornerShape(7.dp)), contentAlignment = Alignment.Center) {
-                    Text("C", color = C.OnAccent, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                }
+                    contentDescription = "Empire TV", modifier = Modifier.height(28.dp),
+                ) else androidx.compose.foundation.Image(
+                    painter = androidx.compose.ui.res.painterResource(app.sideline.tv.R.drawable.empire_mark),
+                    contentDescription = "Empire TV", modifier = Modifier.size(30.dp),
+                )
             }
             Spacer(Modifier.height(6.dp))
             Tab.entries.forEach { t -> SideItem(t, t == tab, expanded, requesters.getValue(t)) { onSelect(t) } }
             Spacer(Modifier.weight(1f))
-            Text(if (expanded) "Cooper TV · build $build" else "b$build", color = C.Faint, fontSize = 11.sp, maxLines = 1,
+            Text(if (expanded) "Empire TV · build $build" else "b$build", color = C.Faint, fontSize = 11.sp, maxLines = 1,
                 modifier = Modifier.padding(start = 8.dp))
         }
     }
@@ -234,7 +246,7 @@ private fun UpdateBanner(build: Int) {
         val last = sp.getInt("lastBuild", 0)
         if (build > 0 && build != last) {
             sp.edit().putInt("lastBuild", build).apply()
-            show = if (last == 0) "Cooper TV build $build" else "Updated to build $build (was build $last)"
+            show = if (last == 0) "Empire TV build $build" else "Updated to build $build (was build $last)"
             kotlinx.coroutines.delay(8000)
             show = null
         }
@@ -286,7 +298,7 @@ private fun LoadingDialog() {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     CircularProgressIndicator(color = C.Accent, strokeWidth = 3.dp, modifier = Modifier.size(28.dp))
                     Spacer(Modifier.width(14.dp))
-                    Text("Getting Cooper TV ready", color = C.Text, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                    Text("Getting Empire TV ready", color = C.Text, fontSize = 24.sp, fontWeight = FontWeight.Bold)
                 }
                 Text("Downloading your channels, movies and series. The first time can take a minute; after that the app opens instantly " +
                     "from a saved copy and updates in the background.", color = C.Muted, fontSize = 14.sp, modifier = Modifier.padding(top = 10.dp, bottom = 14.dp))
@@ -319,4 +331,47 @@ private fun Clock() {
         }
     }
     Text(timeOf(now), color = C.Text, fontSize = 18.sp, fontWeight = FontWeight.Medium)
+}
+
+/** Each time the app opens: a reminder if any IPTV account expires within 7 days (or already has). */
+@Composable
+private fun ExpiryReminder() {
+    val opens by AppOpens.count
+    val status by SidelineApp.repo.accountStatus.collectAsState()
+    val accounts by SidelineApp.prefs.accounts.collectAsState()
+    var shownFor by androidx.compose.runtime.remember { mutableStateOf(-1) }
+    var open by androidx.compose.runtime.remember { mutableStateOf(false) }
+    val soon = accounts.mapNotNull { a ->
+        val at = status[a.id]?.expiresAt ?: return@mapNotNull null
+        if (at - System.currentTimeMillis() <= 7 * 86_400_000L) a to at else null
+    }
+    androidx.compose.runtime.LaunchedEffect(opens, soon.size) {
+        if (soon.isNotEmpty() && shownFor != opens) { shownFor = opens; open = true }
+    }
+    if (!open || soon.isEmpty()) return
+    val ok = androidx.compose.runtime.remember { FocusRequester() }
+    androidx.compose.runtime.LaunchedEffect(Unit) { kotlinx.coroutines.delay(250); try { ok.requestFocus() } catch (_: Exception) {} }
+    TvDialog({ open = false }) {
+        Box(Modifier.fillMaxSize().background(Color(0x99000000)), contentAlignment = Alignment.Center) {
+            Column(Modifier.width(620.dp).background(C.Surface, RoundedCornerShape(18.dp)).padding(28.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Time to renew", color = C.Text, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                soon.forEach { (a, at) ->
+                    val days = Math.floorDiv(at - System.currentTimeMillis(), 86_400_000L)
+                    val date = java.text.SimpleDateFormat("EEE d MMM", java.util.Locale.getDefault()).format(java.util.Date(at))
+                    val host = a.server.removePrefix("http://").removePrefix("https://").substringBefore('/')
+                    Text(
+                        "${a.name} ($host) " + when {
+                            at < System.currentTimeMillis() -> "expired on $date."
+                            days < 1 -> "expires today ($date)."
+                            else -> "expires in $days day${if (days == 1L) "" else "s"}, on $date."
+                        },
+                        color = if (at < System.currentTimeMillis()) C.Live else C.Gold, fontSize = 17.sp,
+                    )
+                }
+                Text("This reminder shows each time you open Empire TV until the date moves on. Dates are in Settings → IPTV accounts.",
+                    color = C.Muted, fontSize = 13.sp)
+                Chip("OK", true, onClick = { open = false }, modifier = Modifier.focusRequester(ok))
+            }
+        }
+    }
 }

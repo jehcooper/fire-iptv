@@ -110,17 +110,17 @@ fun rememberLibraryIndex(): Discover.Index? {
 /** TMDB poster; titles you can play get a red ▶ badge. */
 @Composable
 fun TitlePoster(t: Discover.Title, index: Discover.Index?, modifier: Modifier = Modifier) {
-    val inLib = index != null && (if (t.isTv) index.series(t) != null else index.movie(t) != null)
+    val m = if (!t.isTv) index?.movie(t) else null
+    val sr = if (t.isTv) index?.series(t) else null
+    val inLib = m != null || sr != null
     PosterCard(
-        t.title + if (t.year.isNotBlank()) " (${t.year})" else "", t.poster,
-        onClick = {
-            val m = if (!t.isTv) index?.movie(t) else null
-            val s = if (t.isTv) index?.series(t) else null
-            Pages.open(Page.Title(t, m, s))
-        },
+        t.title, t.poster,
+        onClick = { Pages.open(Page.Title(t, m, sr)) },
+        onMenu = { TitleOptions.show(OptTarget(movie = m, series = sr, tmdb = t)) },
         modifier = modifier,
         badge = if (inLib) "▶" + (t.score?.let { " %.1f".format(it) } ?: "") else t.score?.let { "★ %.1f".format(it) },
         badgeColor = if (inLib) C.Live else C.Accent, badgeTextColor = if (inLib) Color.White else C.OnAccent,
+        meta = listOfNotNull(t.year.takeIf { it.isNotBlank() }, TmdbApi.genreNames(t).firstOrNull()).joinToString(" · "),
     )
 }
 
@@ -417,7 +417,7 @@ private fun prettyDate(iso: String): String = try {
 } catch (e: Exception) { iso }
 
 @Composable
-private fun RateDialog(current: Int?, onPick: (Int) -> Unit, onDismiss: () -> Unit) {
+internal fun RateDialog(current: Int?, onPick: (Int) -> Unit, onDismiss: () -> Unit) {
     val first = remember { FocusRequester() }
     LaunchedEffect(Unit) { delay(200); try { first.requestFocus() } catch (_: Exception) {} }
     TvDialog(onDismiss) {

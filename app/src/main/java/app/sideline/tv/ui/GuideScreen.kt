@@ -215,7 +215,7 @@ fun pickProgramme(ctx: android.content.Context, c: Channel, item: EpgItem?, queu
                 }
             } else {
                 Confirm.ask("Remind me when \"${item.title}\" starts?",
-                    "${c.name} · ${dayTimeOf(item.start * 1000)}. A pop-up will offer to switch to it (while Cooper TV is open).",
+                    "${c.name} · ${dayTimeOf(item.start * 1000)}. A pop-up will offer to switch to it (while Empire TV is open).",
                     yes = "🔔 Remind me") { SidelineApp.reminders.add(r) }
             }
         }
