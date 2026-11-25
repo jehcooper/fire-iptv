@@ -830,7 +830,7 @@ class PlayerActivity : ComponentActivity() {
         val sit = g.situation
         Column(Modifier.clip(RoundedCornerShape(10.dp)).background(Color(0xE6131A22)).padding(horizontal = 12.dp, vertical = 8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(league?.tag ?: "", color = C.Accent, fontSize = 11.sp, fontWeight = FontWeight.Bold,
+                Text(league?.tag ?: "", color = C.Accent, fontSize = 12.sp, fontWeight = FontWeight.Bold,
                     modifier = Modifier.clip(RoundedCornerShape(4.dp)).background(Color(0x332EE59D)).padding(horizontal = 5.dp, vertical = 1.dp))
                 Spacer(Modifier.width(8.dp))
                 if (g.isLive) { Box(Modifier.size(8.dp).clip(CircleShape).background(C.Live)); Spacer(Modifier.width(8.dp)) }
@@ -841,7 +841,7 @@ class PlayerActivity : ComponentActivity() {
                         Spacer(Modifier.width(4.dp))
                         Text(c.abbr.ifBlank { c.shortName.take(10) }, color = C.Text, fontSize = 14.sp)
                         if (g.isLive && sit?.possessionTeamId != null && sit.possessionTeamId == c.id) Text(" 🏈", fontSize = 12.sp)
-                        g.soccer?.let { sc -> val reds = if (c.home) sc.redHome else sc.redAway; if (reds > 0) Text(" " + "🟥".repeat(reds), fontSize = 11.sp) }
+                        g.soccer?.let { sc -> val reds = if (c.home) sc.redHome else sc.redAway; if (reds > 0) Text(" " + "🟥".repeat(reds), fontSize = 12.sp) }
                         if (g.state != "pre") {
                             Spacer(Modifier.width(6.dp))
                             Text(if (spoilerFree) "•" else c.score, color = C.Text, fontSize = 17.sp, fontWeight = FontWeight.Bold)

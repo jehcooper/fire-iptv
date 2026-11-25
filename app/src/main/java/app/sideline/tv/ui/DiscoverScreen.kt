@@ -123,7 +123,7 @@ fun DiscoverScreen(goTo: (Tab) -> Unit) {
         items(readyRows, key = { it.title }) { row ->
             Column(Modifier.padding(start = 48.dp)) {
                 SectionTitle(row.title)
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 48.dp, bottom = 12.dp)) {
+                LazyRow(Modifier.rememberRowPosition(), horizontalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 48.dp, bottom = 12.dp)) {
                     items(row.items, key = { it.t.tmdbId + it.t.isTv }) { i ->
                         PosterCard(
                             i.t.title, i.movie?.poster?.takeIf { i.t.poster == null } ?: i.t.poster,

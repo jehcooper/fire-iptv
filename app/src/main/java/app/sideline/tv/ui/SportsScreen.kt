@@ -272,7 +272,7 @@ private fun GameListRow(
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(tag, color = C.Accent, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    Text(tag, color = C.Accent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.width(6.dp))
                     Text(
                         when {
@@ -281,11 +281,11 @@ private fun GameListRow(
                                 .filter { it.isNotBlank() }.joinToString(" · ")
                             else -> g.detail
                         },
-                        color = if (g.isLive) C.Live else C.Muted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        color = if (g.isLive) C.Live else C.Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f),
                     )
-                    if (followed) Text("🔔", fontSize = 11.sp)
-                    if (pinned) Text("📌", fontSize = 11.sp)
+                    if (followed) Text("🔔", fontSize = 12.sp)
+                    if (pinned) Text("📌", fontSize = 12.sp)
                 }
                 if (g.competitors.size == 2) {
                     val a = g.away; val h = g.home
@@ -503,7 +503,7 @@ fun MatchRow(m: ChannelMatch, onClick: () -> Unit, modifier: Modifier = Modifier
                 Text(m.reason, color = C.Faint, fontSize = 12.sp, maxLines = 1)
             }
             Box(Modifier.clip(RoundedCornerShape(6.dp)).background(if (m.strong) C.Accent else C.Surface2).padding(6.dp)) {
-                Text(if (m.strong) "likely" else "maybe", color = if (m.strong) C.Bg else C.Muted, fontSize = 11.sp)
+                Text(if (m.strong) "likely" else "maybe", color = if (m.strong) C.Bg else C.Muted, fontSize = 12.sp)
             }
         }
     }
@@ -584,7 +584,7 @@ fun GameSheet(game: Game, onDismiss: () -> Unit) {
                     Spacer(Modifier.height(8.dp))
                     Chip(if (live.id in pinned) "📌 Pinned" else "📌 Pin score", live.id in pinned,
                         onClick = { prefs.togglePin(live.id) })
-                    Text("Pinned scores show along the bottom while you watch.", color = C.Faint, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
+                    Text("Pinned scores show along the bottom while you watch.", color = C.Faint, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
                     Spacer(Modifier.height(12.dp))
                     Text("Channels showing this game", color = C.Muted, fontSize = 12.sp)
                     Spacer(Modifier.height(6.dp))
@@ -631,7 +631,7 @@ fun GameDetailView(d: app.sideline.tv.sports.GameDetail) {
         }
         if (d.teamStats.isNotEmpty()) DetailBlock("Team stats") {
             val (a, h) = d.periodLines.map { it.first }.let { (it.getOrNull(0) ?: "Away") to (it.getOrNull(1) ?: "Home") }
-            Row { Text("", modifier = Modifier.width(110.dp)); Text(a, color = C.Faint, fontSize = 11.sp, modifier = Modifier.width(80.dp)); Text(h, color = C.Faint, fontSize = 11.sp) }
+            Row { Text("", modifier = Modifier.width(110.dp)); Text(a, color = C.Faint, fontSize = 12.sp, modifier = Modifier.width(80.dp)); Text(h, color = C.Faint, fontSize = 12.sp) }
             d.teamStats.forEach { (label, x, y) ->
                 Row {
                     Text(label, color = C.Muted, fontSize = 12.sp, modifier = Modifier.width(110.dp))
@@ -662,8 +662,8 @@ private fun PeriodTable(title: String, headers: List<String>, lines: List<Triple
     DetailBlock(title) {
         Row {
             Text("", modifier = Modifier.width(60.dp))
-            headers.forEach { Text(it, color = C.Faint, fontSize = 11.sp, modifier = Modifier.width(38.dp)) }
-            Text("T", color = C.Faint, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            headers.forEach { Text(it, color = C.Faint, fontSize = 12.sp, modifier = Modifier.width(38.dp)) }
+            Text("T", color = C.Faint, fontSize = 12.sp, fontWeight = FontWeight.Bold)
         }
         lines.forEach { (team, vals, total) ->
             Row {

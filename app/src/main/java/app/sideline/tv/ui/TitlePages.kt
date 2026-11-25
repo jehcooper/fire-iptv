@@ -321,7 +321,7 @@ private fun TitlePage(page: Page.Title) {
             // ---- Seasons & episodes (TMDB names, pictures and descriptions; ▶ where your provider has it) ----
             if (isTv && seasonNums.isNotEmpty()) {
                 item(key = "seasons") {
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 12.dp)) {
+                    LazyRow(Modifier.rememberRowPosition(), horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 12.dp)) {
                         items(seasonNums) { n ->
                             val name = d?.seasons?.firstOrNull { it.number == n }?.name?.takeIf { it.isNotBlank() } ?: if (n == 0) "Specials" else "Season $n"
                             Chip(name, n == season, onClick = { season = n }, compact = true)
@@ -344,7 +344,7 @@ private fun TitlePage(page: Page.Title) {
             if (cast.isNotEmpty()) item(key = "cast") {
                 Column {
                     Text("Cast", color = C.Text, fontSize = 19.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 8.dp))
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 12.dp)) {
+                    LazyRow(Modifier.rememberRowPosition(), horizontalArrangement = Arrangement.spacedBy(14.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 12.dp)) {
                         items(cast, key = { it.id + it.role }) { p ->
                             FocusCard(onClick = { Pages.open(Page.Person(p.id, p.name, p.photo)) }, modifier = Modifier.width(120.dp),
                                 shape = RoundedCornerShape(14.dp)) { _ ->
@@ -353,7 +353,7 @@ private fun TitlePage(page: Page.Title) {
                                         modifier = Modifier.size(84.dp).clip(CircleShape).background(C.Surface2))
                                     Text(p.name, color = C.Text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 2,
                                         overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 6.dp))
-                                    if (p.role.isNotBlank()) Text(p.role, color = C.Muted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    if (p.role.isNotBlank()) Text(p.role, color = C.Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 }
                             }
                         }
@@ -366,7 +366,7 @@ private fun TitlePage(page: Page.Title) {
             if (more.isNotEmpty()) item(key = "more") {
                 Column {
                     Text("More like this", color = C.Text, fontSize = 19.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 8.dp))
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 12.dp)) {
+                    LazyRow(Modifier.rememberRowPosition(), horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 12.dp)) {
                         items(libraryFirst(more, index), key = { it.tmdbId }) { t -> TitlePoster(t, index) }
                     }
                 }

@@ -149,7 +149,7 @@ fun LiveScreen() {
     if (guide) {
         // Full-width TV guide; categories become a row of chips across the top.
         Column(Modifier.fillMaxSize().padding(start = 48.dp, end = 48.dp, top = 4.dp)) {
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 12.dp)) {
+            LazyRow(Modifier.rememberRowPosition(), horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 12.dp)) {
                 item { Chip("☰ List view", false, onClick = { guide = false }) }
                 item { Chip("★ Favourites", selected == FAV, onClick = { selected = FAV }) }
                 items(cats, key = { "${it.accountId}:${it.id}" }) { c ->
@@ -216,7 +216,7 @@ fun LiveScreen() {
                             Box(Modifier.padding(vertical = 4.dp).fillMaxWidth().height(2.dp).background(C.Surface2)) {
                                 Box(Modifier.fillMaxWidth(frac).height(2.dp).background(C.Accent))
                             }
-                            if (now.description.isNotBlank()) Text(now.description, color = C.Faint, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            if (now.description.isNotBlank()) Text(now.description, color = C.Faint, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                         if (next != null) Text("Next ${timeOf(next.start * 1000)}  ${next.title}", color = C.Muted, fontSize = 12.sp, maxLines = 1)
                         if (now == null) Text("No guide info for this channel", color = C.Faint, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))

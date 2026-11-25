@@ -100,14 +100,14 @@ private fun StandingsCard(g: StandGroup, favIds: Set<String>) {
     FocusCard(onClick = { open = true }, modifier = Modifier.width(340.dp), scaleOnFocus = 1.02f) { focused ->
         Column(Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(l?.tag ?: "", color = C.Accent, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Text(l?.tag ?: "", color = C.Accent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.width(6.dp))
                 Text(g.name, color = C.Text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1,
                     overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
             }
             StandHeader(l)
             window.forEach { i -> StandLine(l, i, g.rows[i], favIds) }
-            Text(if (focused) "OK: full table (${g.rows.size} teams)" else "${g.rows.size} teams", color = C.Faint, fontSize = 10.sp,
+            Text(if (focused) "OK: full table (${g.rows.size} teams)" else "${g.rows.size} teams", color = C.Faint, fontSize = 12.sp,
                 modifier = Modifier.padding(top = 4.dp))
         }
     }
@@ -119,12 +119,12 @@ private fun usesPoints(l: League?) = l?.path?.let { it.startsWith("hockey") || i
 @Composable
 fun StandHeader(l: League?) {
     Row(Modifier.padding(top = 6.dp, bottom = 2.dp)) {
-        Text("#", color = C.Faint, fontSize = 11.sp, modifier = Modifier.width(36.dp))
-        Text("Team", color = C.Faint, fontSize = 11.sp, modifier = Modifier.weight(1f))
-        Text("GP", color = C.Faint, fontSize = 11.sp, modifier = Modifier.width(32.dp))
-        Text("Record", color = C.Faint, fontSize = 11.sp, modifier = Modifier.width(76.dp))
-        Text(if (usesPoints(l)) "PTS" else "PCT", color = C.Faint, fontSize = 11.sp, modifier = Modifier.width(44.dp))
-        Text("Live", color = C.Faint, fontSize = 11.sp, modifier = Modifier.width(44.dp))
+        Text("#", color = C.Faint, fontSize = 12.sp, modifier = Modifier.width(36.dp))
+        Text("Team", color = C.Faint, fontSize = 12.sp, modifier = Modifier.weight(1f))
+        Text("GP", color = C.Faint, fontSize = 12.sp, modifier = Modifier.width(32.dp))
+        Text("Record", color = C.Faint, fontSize = 12.sp, modifier = Modifier.width(76.dp))
+        Text(if (usesPoints(l)) "PTS" else "PCT", color = C.Faint, fontSize = 12.sp, modifier = Modifier.width(44.dp))
+        Text("Live", color = C.Faint, fontSize = 12.sp, modifier = Modifier.width(44.dp))
     }
 }
 
@@ -142,15 +142,15 @@ fun StandLine(l: League?, i: Int, r: StandRow, favIds: Set<String>, full: Boolea
     ) {
         Row(Modifier.width(36.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("${i + 1}", color = C.Muted, fontSize = fs)
-            if (move > 0) Text("▲", color = C.Accent, fontSize = 10.sp)
-            if (move < 0) Text("▼", color = C.Live, fontSize = 10.sp)
+            if (move > 0) Text("▲", color = C.Accent, fontSize = 12.sp)
+            if (move < 0) Text("▼", color = C.Live, fontSize = 12.sp)
         }
         Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
             AsyncImage(model = r.logo, contentDescription = null, modifier = Modifier.size(if (full) 22.dp else 18.dp))
             Spacer(Modifier.width(6.dp))
             Text(if (full) r.name else r.abbr.ifBlank { r.name }, color = if (mine) C.Text else C.Muted, fontSize = fs,
                 fontWeight = if (mine) FontWeight.Bold else FontWeight.Normal, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (r.playing) Text(" ●", color = C.Live, fontSize = 10.sp)
+            if (r.playing) Text(" ●", color = C.Live, fontSize = 12.sp)
         }
         Text("${r.gp}", color = C.Muted, fontSize = fs, modifier = Modifier.width(32.dp))
         Text(r.record, color = C.Muted, fontSize = fs, modifier = Modifier.width(76.dp))

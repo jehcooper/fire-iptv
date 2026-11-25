@@ -133,7 +133,7 @@ fun SearchScreen() {
                 if (r.error != null) item { Text(r.error, color = C.Gold, fontSize = 14.sp) }
                 if (r.lib.isNotEmpty()) item(key = "lib") {
                     Section("In your library (${r.lib.size})") {
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 12.dp)) {
+                        LazyRow(Modifier.rememberRowPosition(), horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 12.dp)) {
                             items(r.lib, key = { x ->
                                 when (x) { is app.sideline.tv.data.Movie -> "m" + x.key; is app.sideline.tv.data.Series -> "s${x.accountId}:${x.seriesId}"; else -> x.hashCode() }
                             }) { x ->
@@ -167,14 +167,14 @@ fun SearchScreen() {
                 }
                 if (r.titles.isNotEmpty()) item(key = "titles") {
                     Section("Movies & series") {
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 12.dp)) {
+                        LazyRow(Modifier.rememberRowPosition(), horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 12.dp)) {
                             items(libraryFirst(r.titles, index), key = { (if (it.isTv) "t" else "m") + it.tmdbId }) { t -> TitlePoster(t, index) }
                         }
                     }
                 }
                 if (r.people.isNotEmpty()) item(key = "people") {
                     Section("People") {
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 12.dp)) {
+                        LazyRow(Modifier.rememberRowPosition(), horizontalArrangement = Arrangement.spacedBy(14.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 12.dp)) {
                             items(r.people, key = { it.id }) { p ->
                                 FocusCard(onClick = { Pages.open(Page.Person(p.id, p.name, p.photo)) }, modifier = Modifier.width(150.dp)) { _ ->
                                     Column(Modifier.padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -182,7 +182,7 @@ fun SearchScreen() {
                                             modifier = Modifier.size(96.dp).clip(CircleShape).background(C.Surface2))
                                         Text(p.name, color = C.Text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 2,
                                             overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 6.dp))
-                                        Text(listOf(p.dept, p.knownFor).filter { it.isNotBlank() }.joinToString(" · "), color = C.Muted, fontSize = 11.sp,
+                                        Text(listOf(p.dept, p.knownFor).filter { it.isNotBlank() }.joinToString(" · "), color = C.Muted, fontSize = 12.sp,
                                             maxLines = 3, overflow = TextOverflow.Ellipsis)
                                     }
                                 }

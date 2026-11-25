@@ -203,7 +203,7 @@ fun FieldBar(g: Game, sit: Situation, width: Dp) {
             val x = width * 0.08f + (width * 0.84f) * (fromLeft / 100f)
             Text(
                 if (awayHasBall) "●▸" else "◂●",
-                color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold,
+                color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold,
                 modifier = Modifier.align(Alignment.CenterStart).offset(x = x - (if (awayHasBall) 4.dp else 12.dp)),
             )
         }
