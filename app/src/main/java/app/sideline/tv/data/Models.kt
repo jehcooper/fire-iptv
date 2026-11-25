@@ -95,6 +95,9 @@ data class Series(
     val categoryId: String,
     val plot: String?,
     val rating: String?,
+    /** Release year and last-updated time (epoch seconds), when the provider sends them. */
+    val year: Int? = null,
+    val added: Long = 0,
 )
 
 data class Episode(

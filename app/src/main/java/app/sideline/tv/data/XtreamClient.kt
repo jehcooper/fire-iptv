@@ -107,7 +107,9 @@ class XtreamClient(val account: Account) {
 
     suspend fun series(fromCache: Boolean = false): List<Series> = listCall("get_series", fromCache).arr()?.mapNotNull { it.obj() }?.mapNotNull { o ->
         val id = o.i("series_id") ?: return@mapNotNull null
-        Series(account.id, id, o.s("name") ?: "Series $id", o.s("cover"), o.s("category_id") ?: "", o.s("plot"), o.s("rating"))
+        Series(account.id, id, o.s("name") ?: "Series $id", o.s("cover"), o.s("category_id") ?: "", o.s("plot"), o.s("rating"),
+            year = (o.s("year") ?: o.s("releaseDate") ?: o.s("release_date"))?.take(4)?.toIntOrNull(),
+            added = o.s("last_modified")?.toLongOrNull() ?: 0)
     } ?: emptyList()
 
     /** Audience rating from the provider's series info, if it has one. */

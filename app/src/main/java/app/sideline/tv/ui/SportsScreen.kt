@@ -400,7 +400,7 @@ private fun SportsDetails(game: Game, first: FocusRequester, onMore: () -> Unit)
 
 /** Simple ▾ menu: a short list in a panel; OK picks, Back closes. */
 @Composable
-private fun PickDialog(title: String, options: List<Pair<String, String>>, selected: String, onPick: (String) -> Unit, onDismiss: () -> Unit) {
+internal fun PickDialog(title: String, options: List<Pair<String, String>>, selected: String, onPick: (String) -> Unit, onDismiss: () -> Unit) {
     val first = remember { FocusRequester() }
     val start = options.indexOfFirst { it.first == selected }.coerceAtLeast(0)
     val state = rememberLazyListState(initialFirstVisibleItemIndex = (start - 3).coerceAtLeast(0))

@@ -79,6 +79,9 @@ private fun <T> VodBrowser(
     continueItems: List<ProgressEntry>,
     /** Optional "Featured" view (TMDB rows) shown first. */
     featured: (@Composable () -> Unit)? = null,
+    yearOf: (T) -> Int? = { null },
+    addedOf: (T) -> Long = { 0L },
+    ratingOf: (T) -> Double? = { null },
     tile: @Composable (T) -> Unit,
 ) {
     val ctx = LocalContext.current
@@ -103,19 +106,25 @@ private fun <T> VodBrowser(
     LaunchedEffect(Unit) { if (app.sideline.tv.data.Tmdb.configured) app.sideline.tv.data.TmdbApi.genres() }
     val watch by prefs.watchlist.collectAsState()
     val watchCount = remember(watch) { watch.count { it.startsWith("$kind:") } }
-    val shown by produceState(initialValue = emptyList<T>(), selected, query, visibleAll, watch) {
+    val sortId = prefs.sorts.collectAsState().value[kind] ?: "provider"
+    var sorting by remember { mutableStateOf(false) }
+    val shown by produceState(initialValue = emptyList<T>(), selected, query, visibleAll, watch, sortId) {
         if (selected == FIND) delay(250)
         value = withContext(Dispatchers.Default) {
-            when (selected) {
+            val list = when (selected) {
                 ALL -> visibleAll.takeLast(300).reversed()
-                EVERYTHING -> visibleAll.sortedBy { nameOf(it).lowercase() }
+                EVERYTHING -> if (sortId == "provider") visibleAll.sortedBy { sortName(nameOf(it)) } else visibleAll
                 FIND -> if (query.length < 2) emptyList() else visibleAll.asSequence().filter { nameOf(it).contains(query, ignoreCase = true) }.take(300).toList()
                 CONTINUE, FEATURED -> emptyList()
                 WATCHLIST -> watch.mapNotNull { k -> visibleAll.firstOrNull { "$kind:${keyOf(it)}" == k } }
                 else -> all.filter { catOf(it) == selected }
             }
+            // "Recently added" keeps its own order; everything else follows your Sort choice.
+            if (selected == ALL) list else sortList(list, sortId, nameOf, yearOf, addedOf, ratingOf)
         }
     }
+    if (sorting) PickDialog("Sort ${if (kind == "vod") "movies" else "series"} by", SORTS, sortId,
+        onPick = { prefs.setSort(kind, it); sorting = false }, onDismiss = { sorting = false })
     if (searching) SearchDialog(query, if (kind == "vod") "Search movies" else "Search series",
         onSearch = { query = it; selected = FIND; searching = false }, onDismiss = { searching = false })
 
@@ -133,7 +142,8 @@ private fun <T> VodBrowser(
                     searching = true
                 }
             }
-            item { CategoryItem("All A–Z  (${visibleAll.size})", selected == EVERYTHING) { selected = EVERYTHING } }
+            item { CategoryItem("Sort: ${SORTS.firstOrNull { it.first == sortId }?.second ?: "Provider order"}", false, selectOnFocus = false) { sorting = true } }
+            item { CategoryItem("All titles  (${visibleAll.size})", selected == EVERYTHING) { selected = EVERYTHING } }
             item { CategoryItem("Recently added", selected == ALL) { selected = ALL } }
             items(visibleCats, key = { "${it.accountId}:${it.id}" }) { c ->
                 val k = "${c.accountId}:${c.id}"
@@ -242,6 +252,8 @@ fun MoviesScreen() {
         "vod", "No movies yet", cats, movies,
         catOf = { "${it.accountId}:${it.categoryId}" }, nameOf = { it.name }, keyOf = { it.key }, continueItems = cont,
         featured = if (app.sideline.tv.data.Tmdb.configured) ({ FeaturedMovies(movies) { open = it } }) else null,
+        yearOf = { it.year ?: MovieInfoService.cleanTitle(it.name).second?.toIntOrNull() }, addedOf = { it.added },
+        ratingOf = { it.rating?.toDoubleOrNull()?.takeIf { r -> r > 0 } },
     ) { m ->
         val inList = "vod:${m.key}" in SidelineApp.prefs.watchlist.collectAsState().value
         PosterCard(m.name, m.poster, onClick = { open = m }, badge = m.rating?.takeIf { it != "0" && it.isNotBlank() }?.let { "★ ${it.take(3)}" }, kind = "movie",
@@ -332,6 +344,8 @@ fun SeriesScreen() {
         "series", "No series yet", cats, series,
         catOf = { "${it.accountId}:${it.categoryId}" }, nameOf = { it.name }, keyOf = { "${it.accountId}:${it.seriesId}" }, continueItems = cont,
         featured = if (app.sideline.tv.data.Tmdb.configured) ({ FeaturedSeries(series) { open = it } }) else null,
+        yearOf = { it.year ?: MovieInfoService.cleanTitle(it.name).second?.toIntOrNull() }, addedOf = { it.added },
+        ratingOf = { it.rating?.toDoubleOrNull()?.takeIf { r -> r > 0 } },
     ) { s -> SeriesTile(s, onClick = { open = s }) }
     open?.let { SeriesSheet(it) { open = null } }
 }
@@ -515,4 +529,27 @@ fun watchlistToggle(key: String, name: String, inList: Boolean) {
     val clean = MovieInfoService.cleanTitle(name).first
     if (inList) Confirm.ask("Remove \"$clean\" from your Watchlist?", yes = "Remove", destructive = true) { SidelineApp.prefs.toggleWatchlist(key) }
     else Confirm.ask("Add \"$clean\" to your Watchlist?", yes = "Add") { SidelineApp.prefs.toggleWatchlist(key) }
+}
+
+/** Sort choices for Movies and Series (id to label). */
+internal val SORTS = listOf(
+    "provider" to "Provider order", "az" to "Name A–Z", "za" to "Name Z–A",
+    "new" to "Year: newest first", "old" to "Year: oldest first", "added" to "Recently added", "rating" to "Rating: highest first",
+)
+
+private val RX_SORT_PREFIX = Regex("^(?:[a-z0-9]{2,4}\\s*[:|\\-]\\s*)?(?:the|a|an)\\s+")
+
+/** Name used for A–Z: lower case, without "The"/"A"/"An" or a "4K:" style prefix. */
+internal fun sortName(n: String): String = MovieInfoService.cleanTitle(n).first.lowercase().replace(RX_SORT_PREFIX, "").trim()
+
+internal fun <T> sortList(
+    list: List<T>, mode: String, nameOf: (T) -> String, yearOf: (T) -> Int?, addedOf: (T) -> Long, ratingOf: (T) -> Double?,
+): List<T> = when (mode) {
+    "az" -> list.sortedBy { sortName(nameOf(it)) }
+    "za" -> list.sortedByDescending { sortName(nameOf(it)) }
+    "new" -> list.sortedWith(compareBy<T> { yearOf(it) == null }.thenByDescending { yearOf(it) ?: 0 }.thenBy { sortName(nameOf(it)) })
+    "old" -> list.sortedWith(compareBy<T> { yearOf(it) == null }.thenBy { yearOf(it) ?: 0 }.thenBy { sortName(nameOf(it)) })
+    "added" -> list.sortedByDescending { addedOf(it) }
+    "rating" -> list.sortedWith(compareBy<T> { ratingOf(it) == null }.thenByDescending { ratingOf(it) ?: 0.0 })
+    else -> list
 }

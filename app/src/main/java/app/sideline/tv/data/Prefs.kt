@@ -147,6 +147,11 @@ class Prefs(context: Context) {
         _watchlist.value = l
         sp.edit().putString("watchlist", l.joinToString(",")).apply()
     }
+    private val _sorts = MutableStateFlow(mapOf("vod" to (sp.getString("sort_vod", "provider") ?: "provider"),
+        "series" to (sp.getString("sort_series", "provider") ?: "provider")))
+    /** Sort order per section ("vod" / "series"). */
+    val sorts: StateFlow<Map<String, String>> = _sorts
+    fun setSort(kind: String, v: String) { _sorts.value = _sorts.value + (kind to v); sp.edit().putString("sort_$kind", v).apply() }
     private val _font = MutableStateFlow(sp.getString("font", "grotesk") ?: "grotesk")
     val font: StateFlow<String> = _font
     fun setFont(id: String) { _font.value = id; sp.edit().putString("font", id).apply(); app.sideline.tv.ui.Fonts.set(id) }
