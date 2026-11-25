@@ -353,14 +353,17 @@ private fun TitlePage(page: Page.Title) {
                     Text("Cast", color = C.Text, fontSize = 19.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 8.dp))
                     LazyRow(Modifier.rememberRowPosition(), horizontalArrangement = Arrangement.spacedBy(14.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 12.dp)) {
                         items(cast, key = { it.id + it.role }) { p ->
-                            FocusCard(onClick = { Pages.open(Page.Person(p.id, p.name, p.photo)) }, modifier = Modifier.width(120.dp),
+                            // Every cast card is the same size: two lines for the name, one for the character.
+                            FocusCard(onClick = { Pages.open(Page.Person(p.id, p.name, p.photo)) }, modifier = Modifier.width(124.dp).height(182.dp),
                                 shape = RoundedCornerShape(14.dp)) { _ ->
-                                Column(Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Column(Modifier.fillMaxSize().padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                                     AsyncImage(model = p.photo, contentDescription = null, contentScale = ContentScale.Crop,
                                         modifier = Modifier.size(84.dp).clip(CircleShape).background(C.Surface2))
-                                    Text(p.name, color = C.Text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 2,
-                                        overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 6.dp))
-                                    if (p.role.isNotBlank()) Text(p.role, color = C.Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text(p.name, color = C.Text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, minLines = 2,
+                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                        overflow = TextOverflow.Ellipsis, modifier = Modifier.fillMaxWidth().padding(top = 6.dp))
+                                    Text(p.role.ifBlank { " " }, color = C.Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.fillMaxWidth())
                                 }
                             }
                         }
