@@ -57,6 +57,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import app.sideline.tv.SidelineApp
@@ -279,7 +280,7 @@ private fun GridPoster(
                     .padding(horizontal = 6.dp, vertical = 2.dp))
         }
         // Full title (wraps, never cut short), accent-coloured while selected; then year · genre.
-        Text(name, color = if (focused) C.Accent else C.Text, fontSize = 14.sp, lineHeight = 18.sp,
+        Text(name, color = if (focused) C.Accent else C.Text, fontSize = 14.sp, lineHeight = 1.3.em,
             fontWeight = if (focused) FontWeight.Bold else FontWeight.Medium,
             modifier = Modifier.padding(top = 8.dp, start = 2.dp, end = 2.dp))
         val meta = metaOverride ?: listOfNotNull(year, genres.firstOrNull()).joinToString(" · ")

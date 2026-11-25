@@ -114,6 +114,7 @@ private fun StandingsCard(g: StandGroup, favIds: Set<String>) {
     if (open) FullStandingsDialog(g, favIds) { open = false }
 }
 
+private fun isCollegeL(l: League?) = l?.path?.contains("college") == true
 private fun usesPoints(l: League?) = l?.path?.let { it.startsWith("hockey") || it.startsWith("soccer") } == true
 
 @Composable
@@ -121,9 +122,14 @@ fun StandHeader(l: League?) {
     Row(Modifier.padding(top = 6.dp, bottom = 2.dp)) {
         Text("#", color = C.Faint, fontSize = 12.sp, modifier = Modifier.width(36.dp))
         Text("Team", color = C.Faint, fontSize = 12.sp, modifier = Modifier.weight(1f))
-        Text("GP", color = C.Faint, fontSize = 12.sp, modifier = Modifier.width(32.dp))
-        Text("Record", color = C.Faint, fontSize = 12.sp, modifier = Modifier.width(76.dp))
-        Text(if (usesPoints(l)) "PTS" else "PCT", color = C.Faint, fontSize = 12.sp, modifier = Modifier.width(44.dp))
+        if (isCollegeL(l)) {
+            Text("Conf", color = C.Faint, fontSize = 12.sp, modifier = Modifier.width(52.dp))
+            Text("Overall", color = C.Faint, fontSize = 12.sp, modifier = Modifier.width(68.dp))
+        } else {
+            Text("GP", color = C.Faint, fontSize = 12.sp, modifier = Modifier.width(32.dp))
+            Text("Record", color = C.Faint, fontSize = 12.sp, modifier = Modifier.width(76.dp))
+            Text(if (usesPoints(l)) "PTS" else "PCT", color = C.Faint, fontSize = 12.sp, modifier = Modifier.width(44.dp))
+        }
         Text("Live", color = C.Faint, fontSize = 12.sp, modifier = Modifier.width(44.dp))
     }
 }
@@ -152,10 +158,15 @@ fun StandLine(l: League?, i: Int, r: StandRow, favIds: Set<String>, full: Boolea
                 fontWeight = if (mine) FontWeight.Bold else FontWeight.Normal, maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (r.playing) Text(" ●", color = C.Live, fontSize = 12.sp)
         }
-        Text("${r.gp}", color = C.Muted, fontSize = fs, modifier = Modifier.width(32.dp))
-        Text(r.record, color = C.Muted, fontSize = fs, modifier = Modifier.width(76.dp))
-        Text(if (usesPoints(l)) "${r.points ?: "-"}" else ".%03d".format((r.pct * 1000).toInt()).replace(".1000", "1.000"),
-            color = C.Text, fontSize = fs, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(44.dp))
+        if (isCollegeL(l)) {
+            Text(r.confRecord.ifBlank { "-" }, color = C.Text, fontSize = fs, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(52.dp))
+            Text(r.record, color = C.Muted, fontSize = fs, modifier = Modifier.width(68.dp))
+        } else {
+            Text("${r.gp}", color = C.Muted, fontSize = fs, modifier = Modifier.width(32.dp))
+            Text(r.record, color = C.Muted, fontSize = fs, modifier = Modifier.width(76.dp))
+            Text(if (usesPoints(l)) "${r.points ?: "-"}" else ".%03d".format((r.pct * 1000).toInt()).replace(".1000", "1.000"),
+                color = C.Text, fontSize = fs, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(44.dp))
+        }
         Text(r.liveDelta, color = if (r.liveDelta.startsWith("+0") || r.liveDelta == "L") C.Live else C.Accent, fontSize = fs,
             modifier = Modifier.width(44.dp))
     }

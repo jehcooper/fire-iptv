@@ -89,15 +89,41 @@ private fun Typography.withFont(f: FontFamily): Typography {
     )
 }
 
+private fun family(regular: Int, medium: Int, bold: Int) = FontFamily(
+    Font(regular, FontWeight.Normal), Font(medium, FontWeight.Medium), Font(medium, FontWeight.SemiBold),
+    Font(bold, FontWeight.Bold), Font(bold, FontWeight.ExtraBold),
+)
+
+/** A font you can pick in Settings → Font. [scale] evens out how big each font looks (so nothing gets cut off). */
+class FontChoice(val id: String, val name: String, val note: String, val family: FontFamily, val scale: Float)
+
+object Fonts {
+    val all = listOf(
+        FontChoice("grotesk", "Space Grotesk", "Geometric · default", Grotesk, 1.0f),
+        FontChoice("inter", "Inter", "Clean and neutral", Inter, 1.0f),
+        FontChoice("montserrat", "Montserrat", "Wide and bold", family(R.font.montserrat_regular, R.font.montserrat_medium, R.font.montserrat_bold), 0.93f),
+        FontChoice("playfair", "Playfair Display", "Elegant serif", family(R.font.playfair_regular, R.font.playfair_medium, R.font.playfair_bold), 1.0f),
+        FontChoice("nunito", "Nunito", "Soft and rounded", family(R.font.nunito_regular, R.font.nunito_medium, R.font.nunito_bold), 1.0f),
+        FontChoice("josefin", "Josefin Sans", "Art Deco", family(R.font.josefin_regular, R.font.josefin_medium, R.font.josefin_bold), 1.07f),
+    )
+    val current = mutableStateOf(all.first())
+    fun set(id: String) { current.value = all.firstOrNull { it.id == id } ?: all.first() }
+}
+
 @Composable
 fun SidelineTheme(content: @Composable () -> Unit) {
-    val p = Themes.current.value
+    val f = Fonts.current.value
+    val d = androidx.compose.ui.platform.LocalDensity.current
     MaterialTheme(
         colorScheme = darkColorScheme(
             primary = C.Accent, onPrimary = C.OnAccent, background = C.Bg, surface = C.Surface,
             onSurface = C.Text, onBackground = C.Text,
         ),
-        typography = Typography().withFont(if (p.geometric) Grotesk else Inter),
-        content = content,
-    )
+        typography = Typography().withFont(f.family),
+    ) {
+        androidx.compose.runtime.CompositionLocalProvider(
+            androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(d.density, d.fontScale * f.scale),
+            content = content,
+        )
+    }
 }

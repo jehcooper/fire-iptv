@@ -81,6 +81,7 @@ fun SettingsScreen() {
     var editTraktId by remember { mutableStateOf(false) }
     var editTraktSecret by remember { mutableStateOf(false) }
     var traktLogin by remember { mutableStateOf(false) }
+    var editYoutube by remember { mutableStateOf(false) }
     var editOmdb by remember { mutableStateOf(false) }
     var editGuideUrl by remember { mutableStateOf(false) }
     var backupOpen by remember { mutableStateOf(false) }
@@ -263,6 +264,20 @@ fun SettingsScreen() {
 
         item {
             Column {
+                SectionTitle("YouTube (game recaps)")
+                val yk by prefs.youtubeKey.collectAsState()
+                Text("Finished games get a ▶ Recap button that finds the official highlight video and plays it here. " +
+                    "It needs a free YouTube key (about 100 recap searches a day).", color = C.Muted, fontSize = 14.sp)
+                Text("One-time setup, easiest from your phone: console.cloud.google.com → create a project → APIs & Services → Library → " +
+                    "enable \"YouTube Data API v3\" → Credentials → Create credentials → API key. Paste it here or in \"Set up from phone\" → Keys.",
+                    color = C.Faint, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp))
+                Spacer(Modifier.height(8.dp))
+                Chip(if (yk.isBlank()) "Add YouTube key" else "YouTube key ✓ (change)", yk.isNotBlank(), onClick = { editYoutube = true })
+            }
+        }
+
+        item {
+            Column {
                 SectionTitle("Trakt")
                 val token by prefs.traktToken.collectAsState()
                 val user by prefs.traktUser.collectAsState()
@@ -329,6 +344,17 @@ fun SettingsScreen() {
                 Text("Colour scheme for the whole app. Midnight teal is the default; Lavender is the previous look.", color = C.Muted, fontSize = 14.sp)
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 12.dp)) {
                     items(Themes.all, key = { it.id }) { t -> ThemeCard(t, t.id == cur) { prefs.setTheme(t.id) } }
+                }
+            }
+        }
+
+        item {
+            Column {
+                SectionTitle("Font")
+                val curF by prefs.font.collectAsState()
+                Text("Text style for the whole app. Each one is sized so titles fit the same way.", color = C.Muted, fontSize = 14.sp)
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 12.dp)) {
+                    items(Fonts.all, key = { it.id }) { f -> FontCard(f, f.id == curF) { prefs.setFont(f.id) } }
                 }
             }
         }
@@ -417,6 +443,8 @@ fun SettingsScreen() {
     if (editTraktSecret) KeyEditor("Trakt Client Secret", "From trakt.tv → Settings → Your API Apps → Empire TV.", "Client Secret",
         prefs.traktSecret.value, { prefs.setTraktApp(prefs.traktClientId.value, it) }) { editTraktSecret = false }
     if (traktLogin) TraktLoginDialog { traktLogin = false }
+    if (editYoutube) KeyEditor("YouTube key", "From console.cloud.google.com → Credentials (YouTube Data API v3 enabled).", "API key",
+        prefs.youtubeKey.value, { prefs.setYoutubeKey(it) }) { editYoutube = false }
     if (phoneOpen) BackupDialog(setup = true) { phoneOpen = false }
     if (speedTest) SpeedTestDialog { speedTest = false }
     leagueOptsFor?.let { LeagueOptionsDialog(it) { leagueOptsFor = null } }
@@ -938,5 +966,23 @@ fun expiryLine(st: app.sideline.tv.data.AccountStatus?): Pair<String, Color> {
         days < 1 -> "Expires today ($date)" to C.Gold
         days <= 7 -> "Expires $date · $days day${if (days == 1L) "" else "s"} left" to C.Gold
         else -> "Expires $date · $days days left" to C.Muted
+    }
+}
+
+/** Sample of a font: "Aa" and a title in that font, with its name. */
+@Composable
+private fun FontCard(f: FontChoice, selected: Boolean, onClick: () -> Unit) {
+    FocusCard(onClick = onClick, modifier = Modifier.width(170.dp), shape = RoundedCornerShape(12.dp), scaleOnFocus = 1.05f) { _ ->
+        Column(Modifier.padding(12.dp)) {
+            Text("Aa", color = if (selected) C.Accent else C.Text, fontSize = (30 * f.scale).sp, fontFamily = f.family, fontWeight = FontWeight.Bold)
+            Text("The Odyssey", color = C.Text, fontSize = (15 * f.scale).sp, fontFamily = f.family, fontWeight = FontWeight.Medium, maxLines = 1)
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 6.dp)) {
+                Column(Modifier.weight(1f)) {
+                    Text(f.name, color = C.Muted, fontSize = 12.sp, maxLines = 1)
+                    Text(f.note, color = C.Faint, fontSize = 11.sp, maxLines = 1)
+                }
+                if (selected) Text("✓", color = C.Accent, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            }
+        }
     }
 }

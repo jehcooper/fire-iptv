@@ -4,6 +4,7 @@ import app.sideline.tv.data.Series
 import app.sideline.tv.data.Movie
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.material3.Text
@@ -299,7 +300,7 @@ private fun ForYouHero() {
             androidx.compose.foundation.layout.Spacer(Modifier.width(10.dp))
             Text(kindLabel, color = C.Muted, fontSize = 12.sp)
         }
-        Text(title, color = C.Text, fontSize = 44.sp, lineHeight = 50.sp, fontWeight = FontWeight.Bold, maxLines = 2,
+        Text(title, color = C.Text, fontSize = 44.sp, lineHeight = 1.2.em, fontWeight = FontWeight.Bold, maxLines = 2,
             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.padding(top = 6.dp).width(700.dp))
         Text(meta, color = C.Muted, fontSize = 15.sp, modifier = Modifier.padding(top = 4.dp))
         if (showLast && last != null) androidx.compose.foundation.layout.Box(
@@ -307,7 +308,7 @@ private fun ForYouHero() {
         ) {
             androidx.compose.foundation.layout.Box(Modifier.fillMaxWidth(last.fraction).height(4.dp).background(C.Accent, androidx.compose.foundation.shape.RoundedCornerShape(2.dp)))
         }
-        if (overview.isNotBlank()) Text(overview, color = C.Text, fontSize = 15.sp, lineHeight = 21.sp, maxLines = 2,
+        if (overview.isNotBlank()) Text(overview, color = C.Text, fontSize = 15.sp, lineHeight = 1.4.em, maxLines = 2,
             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.padding(top = 10.dp).width(620.dp))
         androidx.compose.foundation.layout.Row(
             verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,

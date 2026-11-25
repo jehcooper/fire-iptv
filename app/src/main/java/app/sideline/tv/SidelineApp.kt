@@ -19,6 +19,7 @@ class SidelineApp : Application(), ImageLoaderFactory {
         Net.cacheDir = filesDir.resolve("xtream")
         prefs = Prefs(this)
         app.sideline.tv.ui.Themes.set(prefs.theme.value)
+        app.sideline.tv.ui.Fonts.set(prefs.font.value)
         app.sideline.tv.data.Omdb.init(this)
         repo = Repository(prefs)
         prefs.onChannelEdit = { repo.applyEdits() }

@@ -15,7 +15,11 @@ data class StandRow(
     val playing: Boolean = false,
     /** Official position (1-based) before live projection, for the ▲▼ arrow. */
     val officialRank: Int = 0,
+    /** College: conference record (null for pro leagues). */
+    val confW: Int? = null, val confL: Int? = null, val confT: Int = 0,
 ) {
+    val confRecord: String get() = if (confW == null) "" else "$confW-$confL" + if (confT > 0) "-$confT" else ""
+    val confPct: Double get() { val w = confW ?: return 0.0; val l = confL ?: 0; return if (w + l + confT == 0) 0.0 else (w + confT * 0.5) / (w + l + confT) }
     val record: String get() = when {
         otl > 0 || points != null && ties == 0 -> "$wins-$losses-$otl"
         ties > 0 -> "$wins-$losses-$ties"
@@ -44,7 +48,7 @@ object Standings {
             fun walk(node: JsonObject, parentName: String?) {
                 val entries = node["standings"].obj()?.get("entries").arr()?.mapNotNull { it.obj() }
                 val name = node.s("name") ?: parentName ?: base.name
-                if (!entries.isNullOrEmpty()) groups += StandGroup(base.id, name, entries.mapNotNull { row(it) })
+                if (!entries.isNullOrEmpty()) groups += StandGroup(base.id, name, entries.mapNotNull { row(it, isCollege(base)) })
                 node["children"].arr()?.mapNotNull { it.obj() }?.forEach { walk(it, name) }
             }
             walk(root, null)
@@ -69,25 +73,52 @@ object Standings {
         return null
     }
 
-    private fun row(e: JsonObject): StandRow? {
+    private val RX_REC = Regex("^(\\d+)-(\\d+)(?:-(\\d+))?$")
+
+    /**
+     * One team line. ESPN lists several records per team (overall, conference, home, away…), some sharing the
+     * same stat names, so each value is taken from the right record rather than whichever comes last.
+     */
+    private fun row(e: JsonObject, college: Boolean): StandRow? {
         val t = e["team"].obj() ?: return null
-        val stats = e["stats"].arr()?.mapNotNull { it.obj() }?.associate { (it.s("name") ?: it.s("type") ?: "") to it } ?: emptyMap()
-        fun n(vararg keys: String) = keys.firstNotNullOfOrNull { k -> stats[k]?.let { it.s("value") ?: it.s("displayValue") }?.toDoubleOrNull()?.toInt() }
+        val list = e["stats"].arr()?.mapNotNull { it.obj() } ?: emptyList()
+        fun stat(vararg keys: String) = list.firstOrNull { o ->
+            keys.any { k -> o.s("name").equals(k, true) || o.s("type").equals(k, true) }
+        }
+        fun num(vararg keys: String) = stat(*keys)?.let { it.s("value") ?: it.s("displayValue") }?.toDoubleOrNull()?.toInt()
+        fun rec(o: JsonObject?) = (o?.s("summary") ?: o?.s("displayValue"))?.trim()?.let { RX_REC.find(it) }?.groupValues
+        val overall = rec(stat("overall", "total"))
+        val confStat = list.firstOrNull { o ->
+            listOf(o.s("type"), o.s("name"), o.s("abbreviation"), o.s("displayName")).any { it?.contains("conf", true) == true }
+        }
+        val conf = rec(confStat)
+        var wins = num("wins"); var losses = num("losses"); var ties = num("ties") ?: 0
+        // College tables: overall record from its own summary (the plain "wins" can be a different split).
+        if (college && overall != null) { wins = overall[1].toInt(); losses = overall[2].toInt(); ties = overall[3].toIntOrNull() ?: 0 }
+        if (wins == null && overall != null) { wins = overall[1].toInt(); losses = overall[2].toInt() }
+        val otl = num("otLosses", "overtimeLosses") ?: 0
+        val w = wins ?: 0; val l = losses ?: 0
         return StandRow(
             teamId = t.s("id") ?: return null,
             name = t.s("displayName") ?: t.s("name") ?: "",
             abbr = t.s("abbreviation") ?: "",
             logo = t["logos"].arr()?.firstOrNull().obj()?.s("href"),
-            wins = n("wins") ?: 0, losses = n("losses") ?: 0,
-            otl = n("otLosses", "overtimeLosses") ?: 0, ties = n("ties") ?: 0,
-            points = n("points"), gp = n("gamesPlayed") ?: 0,
+            wins = w, losses = l, otl = otl, ties = ties,
+            points = num("points"),
+            gp = num("gamesPlayed")?.takeIf { it > 0 } ?: (w + l + ties + otl),
+            confW = if (college) conf?.get(1)?.toInt() else null,
+            confL = if (college) conf?.get(2)?.toInt() else null,
+            confT = if (college) conf?.get(3)?.toIntOrNull() ?: 0 else 0,
         )
     }
 
     private fun usesPoints(l: League) = l.path.startsWith("hockey") || l.path.startsWith("soccer")
+    fun isCollege(l: League) = l.path.contains("college")
 
     private fun sort(l: League, rows: List<StandRow>): List<StandRow> =
-        if (usesPoints(l)) rows.sortedWith(compareByDescending<StandRow> { it.points ?: 0 }.thenByDescending { it.wins }.thenBy { it.gp })
+        if (isCollege(l)) rows.sortedWith(compareByDescending<StandRow> { it.confPct }.thenByDescending { it.confW ?: 0 }
+            .thenByDescending { it.pct }.thenByDescending { it.wins })
+        else if (usesPoints(l)) rows.sortedWith(compareByDescending<StandRow> { it.points ?: 0 }.thenByDescending { it.wins }.thenBy { it.gp })
         else rows.sortedWith(compareByDescending<StandRow> { it.pct }.thenByDescending { it.wins })
 
     /** Applies live games "as if they ended now" and re-sorts. */
@@ -124,9 +155,13 @@ object Standings {
             }
         }
         return groups.map { grp ->
+            val ids = grp.rows.map { it.teamId }.toSet()
+            val confGame = live.filter { g -> g.competitors.all { it.id in ids } }.flatMap { g -> g.competitors.map { it.id } }.toSet()
             val rows = grp.rows.map { r ->
                 val c = change[r.teamId] ?: return@map r
+                val inConf = r.confW != null && r.teamId in confGame
                 r.copy(
+                    confW = if (inConf) r.confW!! + c.first else r.confW, confL = if (inConf) (r.confL ?: 0) + c.second else r.confL,
                     wins = r.wins + c.first, losses = r.losses + c.second,
                     ties = r.ties + (tiesAdd[r.teamId] ?: 0),
                     points = r.points?.let { it + (pointsAdd[r.teamId] ?: 0) },

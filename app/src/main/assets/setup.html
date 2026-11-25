@@ -156,7 +156,9 @@ function rKeys(){
   <div class="card"><h2>Trakt</h2><p>Create a free app at <a style="color:#a3abb8" href="https://trakt.tv/oauth/applications/new" target="_blank">trakt.tv → Your API Apps → New application</a>.
    Name: Empire TV · Redirect URI: <b>urn:ietf:wg:oauth:2.0:oob</b>. Paste its Client ID and Client Secret here, Save, then on the TV choose Settings → Trakt → Connect Trakt.</p>
    <label>Client ID</label><input type="text" id="traktId" value="${esc(k.traktId)}" autocapitalize="off">
-   <label>Client Secret</label><input type="text" id="traktSecret" value="${esc(k.traktSecret)}" autocapitalize="off"></div>`;
+   <label>Client Secret</label><input type="text" id="traktSecret" value="${esc(k.traktSecret)}" autocapitalize="off"></div>
+  <div class="card"><h2>YouTube (game recaps)</h2><p>Free key: <a style="color:#a3abb8" href="https://console.cloud.google.com/" target="_blank">console.cloud.google.com</a> → create a project → APIs &amp; Services → Library → enable <b>YouTube Data API v3</b> → Credentials → Create credentials → API key. Paste it here.</p>
+   <input type="text" id="youtube" value="${esc(k.youtube)}" autocapitalize="off"></div>`;
 }
 
 /* ---------- Guide ---------- */
@@ -172,7 +174,8 @@ function rGuide(){
 /* ---------- Display ---------- */
 function rDisplay(){
   const d=S.display;
-  $('#main').innerHTML=`<div class="card"><h2>Theme</h2><select id="theme">${(d.themes||[]).map(t=>`<option value="${t.id}" ${t.id==d.theme?'selected':''}>${esc(t.name)}</option>`).join('')}</select></div>
+  $('#main').innerHTML=`<div class="card"><h2>Theme</h2><select id="theme">${(d.themes||[]).map(t=>`<option value="${t.id}" ${t.id==d.theme?'selected':''}>${esc(t.name)}</option>`).join('')}</select>
+   <label>Font</label><select id="font">${(d.fonts||[]).map(t=>`<option value="${t.id}" ${t.id==d.font?'selected':''}>${esc(t.name)}</option>`).join('')}</select></div>
   <div class="card"><h2>Player panels</h2><label>See-through: <b id="ptv">${d.panelTransparency}%</b> (0% = solid)</label>
    <input type="range" id="pt" min="0" max="100" step="5" value="${d.panelTransparency}" style="width:100%" oninput="$('#ptv').textContent=this.value+'%'"></div>
   <div class="card"><h2>Score pop-ups</h2><label>See-through: <b id="pptv">${d.popupTransparency}%</b> (0% = solid)</label>
@@ -195,9 +198,9 @@ function collect(){
     case 'sports': return {favLeagues:[...S.sp.leagues],leagueOpts:[...S.sp.opts],favConfs:[...S.sp.confs],favTeams:[...S.sp.teams]};
     case 'channels': return {names:S.ch.names,hidden:[...S.ch.hidden],favs:S.ch.favs};
     case 'categories': return {hidden:[...S.catHidden]};
-    case 'keys': return {tmdb:$('#tmdb').value.trim(),omdb:$('#omdb').value.trim(),osKey:$('#osKey').value.trim(),osUser:$('#osUser').value.trim(),osPass:$('#osPass').value,traktId:$('#traktId').value.trim(),traktSecret:$('#traktSecret').value.trim()};
+    case 'keys': return {tmdb:$('#tmdb').value.trim(),omdb:$('#omdb').value.trim(),osKey:$('#osKey').value.trim(),osUser:$('#osUser').value.trim(),osPass:$('#osPass').value,traktId:$('#traktId').value.trim(),traktSecret:$('#traktSecret').value.trim(),youtube:$('#youtube').value.trim()};
     case 'guide': return {source:(document.querySelector('[name=gs]:checked')||{}).value||'full',url:$('#gurl').value.trim()};
-    case 'display': {const d={theme:($('#theme')||{}).value,themes:S.display.themes,panelTransparency:+$('#pt').value,popupTransparency:+$('#ppt').value,spoilerFree:$('#spoil').checked,autoFollowTeams:$('#auto').checked,subsOn:$('#subs').checked,subsLang:$('#lang').value.trim()};S.display=d;return d}
+    case 'display': {const d={theme:($('#theme')||{}).value,themes:S.display.themes,font:($('#font')||{}).value,fonts:S.display.fonts,panelTransparency:+$('#pt').value,popupTransparency:+$('#ppt').value,spoilerFree:$('#spoil').checked,autoFollowTeams:$('#auto').checked,subsOn:$('#subs').checked,subsLang:$('#lang').value.trim()};S.display=d;return d}
   }
 }
 $('#save').onclick=async()=>{

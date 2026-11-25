@@ -364,6 +364,7 @@ private fun SportsDetails(game: Game, first: FocusRequester, onMore: () -> Unit)
                     onClick = { prefs.toggleFollow(game.id) }, modifier = Modifier.focusRequester(first), compact = true)
                 Chip(if (game.id in pinned) "📌 Pinned" else "📌 Pin", game.id in pinned, onClick = { prefs.togglePin(game.id) }, compact = true)
                 Chip("Full screen", false, onClick = onMore, compact = true)
+                if (game.isFinal) RecapChip(game, compact = true)
             }
         }
         item(key = "ch-title") { Text("Channels showing it — OK to watch", color = C.Text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold) }
@@ -584,6 +585,7 @@ fun GameSheet(game: Game, onDismiss: () -> Unit) {
                     Spacer(Modifier.height(8.dp))
                     Chip(if (live.id in pinned) "📌 Pinned" else "📌 Pin score", live.id in pinned,
                         onClick = { prefs.togglePin(live.id) })
+                    if (live.isFinal) RecapChip(live)
                     Text("Pinned scores show along the bottom while you watch.", color = C.Faint, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
                     Spacer(Modifier.height(12.dp))
                     Text("Channels showing this game", color = C.Muted, fontSize = 12.sp)
@@ -672,5 +674,30 @@ private fun PeriodTable(title: String, headers: List<String>, lines: List<Triple
                 Text(total, color = C.Text, fontSize = 12.sp, fontWeight = FontWeight.Bold)
             }
         }
+    }
+}
+
+/** "▶ Recap" for finished games: finds the highlight video on YouTube and plays it in the app. */
+@Composable
+fun RecapChip(game: Game, compact: Boolean = false) {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var msg by remember(game.id) { mutableStateOf<String?>(null) }
+    var busy by remember(game.id) { mutableStateOf(false) }
+    Column {
+        Chip(if (busy) "Finding recap…" else "▶ Recap", false, compact = compact, onClick = {
+            if (busy) return@Chip
+            busy = true; msg = null
+            scope.launch {
+                val r = app.sideline.tv.data.Recaps.find(game)
+                busy = false
+                if (r.videos.isNotEmpty()) {
+                    val names = listOfNotNull(game.away?.shortName, game.home?.shortName)
+                    app.sideline.tv.player.TrailerActivity.start(ctx, r.videos.take(5).map { it.id }, r.videos.take(5).map { it.title },
+                        if (names.size == 2) "Recap: ${names[0]} @ ${names[1]}" else "Recap")
+                } else msg = r.error
+            }
+        })
+        msg?.let { Text(it, color = C.Gold, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp).width(320.dp)) }
     }
 }

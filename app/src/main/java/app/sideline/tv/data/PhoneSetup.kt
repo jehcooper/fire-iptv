@@ -45,12 +45,15 @@ object PhoneSetup {
                 put("tmdb", prefs.tmdbKey.value); put("omdb", prefs.omdbKey.value)
                 put("osKey", prefs.osKey.value); put("osUser", prefs.osUser.value); put("osPass", prefs.osPass.value)
                 put("traktId", prefs.traktClientId.value); put("traktSecret", prefs.traktSecret.value)
+                put("youtube", prefs.youtubeKey.value)
             }
             putJsonObject("guide") { put("source", prefs.guideSource.value); put("url", prefs.guideUrl.value) }
             putJsonObject("display") {
                 put("panelTransparency", prefs.panelTransparency.value)
                 put("popupTransparency", prefs.popupTransparency.value)
                 put("theme", prefs.theme.value)
+                put("font", prefs.font.value)
+                putJsonArray("fonts") { app.sideline.tv.ui.Fonts.all.forEach { f -> addJsonObject { put("id", f.id); put("name", f.name) } } }
                 putJsonArray("themes") { app.sideline.tv.ui.Themes.all.forEach { t -> addJsonObject { put("id", t.id); put("name", t.name) } } }
                 put("spoilerFree", prefs.spoilerFree.value)
                 put("autoFollowTeams", prefs.autoFollowTeams.value)
@@ -121,6 +124,7 @@ object PhoneSetup {
                 prefs.setTmdbKey(d.str("tmdb")); prefs.setOmdbKey(d.str("omdb"))
                 prefs.setOpenSubtitles(d.str("osKey"), d.str("osUser"), d.str("osPass"))
                 prefs.setTraktApp(d.str("traktId"), d.str("traktSecret"))
+                prefs.setYoutubeKey(d.str("youtube"))
             }
             "guide" -> {
                 prefs.setGuideSource(d.str("source").ifBlank { "full" }); prefs.setGuideUrl(d.str("url"))
@@ -129,6 +133,7 @@ object PhoneSetup {
             "display" -> {
                 prefs.setPanelTransparency((d["panelTransparency"] as? JsonPrimitive)?.intOrNull ?: prefs.panelTransparency.value)
                 d.str("theme").takeIf { it.isNotBlank() }?.let { prefs.setTheme(it) }
+                d.str("font").takeIf { it.isNotBlank() }?.let { prefs.setFont(it) }
                 prefs.setPopupTransparency((d["popupTransparency"] as? JsonPrimitive)?.intOrNull ?: prefs.popupTransparency.value)
                 prefs.setSpoilerFree(d.bool("spoilerFree"))
                 prefs.setAutoFollowTeams(d.bool("autoFollowTeams"))

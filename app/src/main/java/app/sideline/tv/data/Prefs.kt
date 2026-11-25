@@ -147,6 +147,13 @@ class Prefs(context: Context) {
         _watchlist.value = l
         sp.edit().putString("watchlist", l.joinToString(",")).apply()
     }
+    private val _font = MutableStateFlow(sp.getString("font", "grotesk") ?: "grotesk")
+    val font: StateFlow<String> = _font
+    fun setFont(id: String) { _font.value = id; sp.edit().putString("font", id).apply(); app.sideline.tv.ui.Fonts.set(id) }
+    private val _youtubeKey = MutableStateFlow(sp.getString("youtubeKey", "") ?: "")
+    /** YouTube Data API key (for game recaps). */
+    val youtubeKey: StateFlow<String> = _youtubeKey
+    fun setYoutubeKey(k: String) { _youtubeKey.value = k.trim(); sp.edit().putString("youtubeKey", k.trim()).apply() }
     private val _theme = MutableStateFlow(sp.getString("theme", "teal") ?: "teal")
     /** Colour scheme id (see ui.Themes). */
     val theme: StateFlow<String> = _theme

@@ -48,6 +48,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.em
 import app.sideline.tv.SidelineApp
 import app.sideline.tv.data.Discover
 import app.sideline.tv.data.Episode
@@ -61,6 +62,8 @@ import app.sideline.tv.player.TrailerActivity
 import coil.compose.AsyncImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import androidx.compose.ui.focus.onFocusChanged
 import kotlinx.coroutines.withContext
 
 /** Full-screen pages that stack on top of the tabs: a title, a person's work, or a list (genre/keyword). Back goes back one. */
@@ -197,6 +200,8 @@ private fun TitlePage(page: Page.Title) {
     var rating by remember { mutableStateOf(false) }
     var traktHint by remember { mutableStateOf("") }
     val first = remember { FocusRequester() }
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
 
     Box(Modifier.fillMaxSize()) {
         if (backdrop != null) {
@@ -205,7 +210,7 @@ private fun TitlePage(page: Page.Title) {
             Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0f to Color.Transparent, 0.5f to C.Bg.copy(alpha = 0.3f), 1f to C.Bg)))
         }
         LazyColumn(
-            Modifier.fillMaxSize(),
+            Modifier.fillMaxSize(), state = listState,
             contentPadding = PaddingValues(start = 64.dp, end = 48.dp, top = 40.dp, bottom = 80.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
@@ -213,7 +218,7 @@ private fun TitlePage(page: Page.Title) {
             item(key = "head") {
                 Row {
                     Column(Modifier.width(620.dp)) {
-                        Text(title, color = C.Text, fontSize = 38.sp, fontWeight = FontWeight.ExtraBold, maxLines = 2, lineHeight = 42.sp)
+                        Text(title, color = C.Text, fontSize = 38.sp, fontWeight = FontWeight.ExtraBold, maxLines = 2, lineHeight = 1.2.em)
                         val meta = listOfNotNull(
                             d?.genres?.take(3)?.joinToString(", ") { it.second }?.takeIf { it.isNotBlank() },
                             (d?.year ?: page.t?.year)?.takeIf { it.isNotBlank() },
@@ -231,7 +236,7 @@ private fun TitlePage(page: Page.Title) {
                         }
                         val overview = d?.overview?.takeIf { it.isNotBlank() } ?: page.t?.overview?.takeIf { it.isNotBlank() } ?: libSeries?.plot
                         when {
-                            overview != null -> Text(overview, color = C.Text, fontSize = 16.sp, lineHeight = 23.sp, maxLines = 5,
+                            overview != null -> Text(overview, color = C.Text, fontSize = 16.sp, lineHeight = 1.45.em, maxLines = 5,
                                 overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 10.dp))
                             tmdbId == null && !lookedUp && app.sideline.tv.data.Tmdb.configured ->
                                 Text("Looking up details…", color = C.Muted, fontSize = 15.sp, modifier = Modifier.padding(top = 10.dp))
@@ -258,7 +263,9 @@ private fun TitlePage(page: Page.Title) {
                         fun fm(kind: String) = if (kind == firstKind) Modifier.focusRequester(first) else Modifier
                         androidx.compose.foundation.layout.FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp),
-                            modifier = Modifier.padding(vertical = 4.dp, horizontal = 2.dp),
+                            // Coming back up to the buttons scrolls right to the top, so the title, year and runtime show again.
+                            modifier = Modifier.padding(vertical = 4.dp, horizontal = 2.dp)
+                                .androidx_onFocusTop { scope.launch { listState.animateScrollToItem(0) } },
                         ) {
                             if (libMovie != null) {
                                 val resumeAt = Play.resumePosition(ctx, Play.movieKey(libMovie))
@@ -489,3 +496,7 @@ private fun GridPage(title: String, subtitle: String, photo: String?, list: List
         }
     }
 }
+
+/** Calls [onFocus] whenever focus moves into this element (or its children). */
+private fun Modifier.androidx_onFocusTop(onFocus: () -> Unit): Modifier =
+    this.onFocusChanged { if (it.hasFocus) onFocus() }
