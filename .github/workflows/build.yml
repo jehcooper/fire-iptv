@@ -3,6 +3,8 @@ name: Build Fire TV app
 on:
   push:
     branches: [main]
+  # Pull requests are only built (to check they compile); nothing is published to the TV.
+  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -36,6 +38,7 @@ jobs:
           path: Sideline.apk
 
       - name: Publish release
+        if: github.event_name != 'pull_request'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}

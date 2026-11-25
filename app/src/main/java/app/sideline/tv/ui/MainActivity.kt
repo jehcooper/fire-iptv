@@ -174,7 +174,7 @@ private fun Sidebar(tab: Tab, onSelect: (Tab) -> Unit, build: Int) {
             Spacer(Modifier.height(6.dp))
             Tab.entries.forEach { t -> SideItem(t, t == tab, expanded, requesters.getValue(t)) { onSelect(t) } }
             Spacer(Modifier.weight(1f))
-            Text(if (expanded) "Empire TV · build $build" else "b$build", color = C.Faint, fontSize = 11.sp, maxLines = 1,
+            Text(if (expanded) "Empire TV · build $build" else "b$build", color = C.Faint, fontSize = 12.sp, maxLines = 1,
                 modifier = Modifier.padding(start = 8.dp))
         }
     }
@@ -227,10 +227,10 @@ private fun HintBar(tab: Tab) {
     ) {
         hints.forEach { (k, v) ->
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(k, color = C.Text, fontSize = 11.sp, fontWeight = FontWeight.Bold,
+                Text(k, color = C.Text, fontSize = 12.sp, fontWeight = FontWeight.Bold,
                     modifier = Modifier.background(C.Surface2, RoundedCornerShape(4.dp)).padding(horizontal = 5.dp, vertical = 1.dp))
                 Spacer(Modifier.width(5.dp))
-                Text(v, color = C.Muted, fontSize = 11.sp)
+                Text(v, color = C.Muted, fontSize = 12.sp)
             }
         }
     }

@@ -195,7 +195,7 @@ fun ProgressCard(p: ProgressEntry, onClick: () -> Unit, modifier: Modifier = Mod
             modifier = Modifier.fillMaxWidth().height(141.dp).onFocusChanged { focused = it.hasFocus }) { _ ->
             AsyncImage(model = art?.backdrop ?: p.image, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
             art?.score?.let {
-                Text("★ %.1f".format(it), color = C.Text, fontSize = 11.sp, fontWeight = FontWeight.Bold,
+                Text("★ %.1f".format(it), color = C.Text, fontSize = 12.sp, fontWeight = FontWeight.Bold,
                     modifier = Modifier.align(Alignment.BottomEnd).padding(start = 6.dp, end = 6.dp, bottom = 10.dp)
                         .background(Color(0xCC0B0D10), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp))
             }
@@ -373,7 +373,7 @@ fun SeriesSheet(s: Series, onDismiss: () -> Unit) {
         if (eps == null) { Text("Loading episodes…", color = C.Muted); return@DetailSheet }
         if (eps.isEmpty()) { Text("No episodes found.", color = C.Muted); return@DetailSheet }
         val seasons = eps.map { it.season }.distinct().sorted()
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 12.dp)) {
+        LazyRow(Modifier.rememberRowPosition(), horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 12.dp)) {
             items(seasons) { n -> Chip("Season $n", n == season, onClick = { season = n }) }
         }
         Spacer(Modifier.height(10.dp))
@@ -455,7 +455,7 @@ private fun FeaturedMovies(movies: List<Movie>, onOpen: (Movie) -> Unit) {
             items(r, key = { it.title }) { row ->
                 Column {
                     Text(row.title, color = C.Text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 6.dp))
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 24.dp, bottom = 12.dp)) {
+                    LazyRow(Modifier.rememberRowPosition(), horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 24.dp, bottom = 12.dp)) {
                         items(row.items, key = { it.t.tmdbId }) { i ->
                             val m = i.movie ?: return@items
                             PosterCard(i.t.title, i.t.poster ?: m.poster, onClick = { onOpen(m) },
@@ -495,7 +495,7 @@ private fun FeaturedSeries(series: List<Series>, onOpen: (Series) -> Unit) {
             items(r, key = { it.title }) { row ->
                 Column {
                     Text(row.title, color = C.Text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 6.dp))
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 24.dp, bottom = 12.dp)) {
+                    LazyRow(Modifier.rememberRowPosition(), horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 24.dp, bottom = 12.dp)) {
                         items(row.items, key = { it.t.tmdbId }) { i ->
                             val sr = i.series ?: return@items
                             PosterCard(i.t.title, i.t.poster ?: sr.cover, onClick = { onOpen(sr) },

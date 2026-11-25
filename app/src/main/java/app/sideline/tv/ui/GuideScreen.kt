@@ -93,7 +93,7 @@ fun ProgramGuide(channels: List<Channel>) {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.height(40.dp)) {
                     Row(Modifier.width(chanW), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(java.text.SimpleDateFormat("EEE d MMM", java.util.Locale.getDefault()).format(java.util.Date(windowStart * 1000)).uppercase(),
-                            color = C.Muted, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                            color = C.Muted, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                         Chip("◀", false, onClick = { windowStart -= 3600 }, compact = true)
                         Chip("▶", false, onClick = { windowStart += 3600 }, compact = true)
                     }
@@ -118,7 +118,7 @@ fun ProgramGuide(channels: List<Channel>) {
             if (tick in windowStart..(windowStart + windowLen)) {
                 Box(Modifier.offset(x = nowX, y = 34.dp).width(2.dp).fillMaxHeight().background(C.Accent.copy(alpha = 0.85f)))
                 // "NOW 12:25" pill on the time ruler (OK on it jumps back to now).
-                Text("NOW ${timeOf(tick * 1000)}", color = C.OnAccent, fontSize = 11.sp, fontWeight = FontWeight.Bold,
+                Text("NOW ${timeOf(tick * 1000)}", color = C.OnAccent, fontSize = 12.sp, fontWeight = FontWeight.Bold,
                     modifier = Modifier.offset(x = nowX - 40.dp, y = 8.dp).clip(RoundedCornerShape(50)).background(C.Accent)
                         .padding(horizontal = 8.dp, vertical = 3.dp))
             }
@@ -185,10 +185,10 @@ private fun GuideRow(
                                 maxLines = 1, overflow = TextOverflow.Ellipsis,
                             )
                             if (slot.item != null && w > 90.dp) Text("${timeOf(slot.item.start * 1000)} – ${timeOf(slot.item.end * 1000)}",
-                                color = C.Faint, fontSize = 11.sp, maxLines = 1)
+                                color = C.Faint, fontSize = 12.sp, maxLines = 1)
                         }
-                        if (past && c.hasArchive) Text("⟲", color = C.Gold, fontSize = 11.sp, modifier = Modifier.align(Alignment.TopEnd))
-                        if (slot.item != null && slot.item.start in reminderStarts) Text("🔔", fontSize = 10.sp, modifier = Modifier.align(Alignment.TopEnd))
+                        if (past && c.hasArchive) Text("⟲", color = C.Gold, fontSize = 12.sp, modifier = Modifier.align(Alignment.TopEnd))
+                        if (slot.item != null && slot.item.start in reminderStarts) Text("🔔", fontSize = 12.sp, modifier = Modifier.align(Alignment.TopEnd))
                     }
                 }
                 Spacer(Modifier.width(3.dp))

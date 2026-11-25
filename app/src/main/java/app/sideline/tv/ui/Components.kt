@@ -40,6 +40,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -75,6 +76,13 @@ import java.util.Locale
  * so rows and buttons are as see-through as the panel itself.
  */
 val LocalPanelAlpha = androidx.compose.runtime.compositionLocalOf { 1f }
+
+/**
+ * For a row of tiles: moving back into the row (up/down from another row) lands on the tile you left,
+ * instead of whichever tile happens to be lined up with you. Standard TV behaviour.
+ */
+@OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
+fun Modifier.rememberRowPosition(): Modifier = this.focusRestorer()
 
 /** The basic remote-friendly tile: grows and lights up when focused. Menu button = secondary action. */
 @Composable
@@ -118,7 +126,7 @@ fun SectionTitle(text: String, modifier: Modifier = Modifier) {
 @Composable
 fun Pill(text: String, color: Color, textColor: Color = C.Bg) {
     Box(Modifier.clip(RoundedCornerShape(6.dp)).background(color).padding(horizontal = 8.dp, vertical = 2.dp)) {
-        Text(text, color = textColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+        Text(text, color = textColor, fontSize = 12.sp, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -158,21 +166,21 @@ fun GameCard(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 val tag = Leagues.byId(game.leagueId)?.tag
                 if (compact && tag != null) {
-                    Text(tag, color = C.Accent, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                    Text(tag, color = C.Accent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.width(5.dp))
                 }
                 when {
-                    game.isLive -> if (compact) Text("● LIVE", color = C.Live, fontSize = 10.sp, fontWeight = FontWeight.Bold) else Pill("LIVE", C.Live, Color.White)
-                    game.isFinal -> if (compact) Text("FINAL", color = C.Faint, fontSize = 10.sp, fontWeight = FontWeight.Bold) else Pill("FINAL", C.Faint, C.Text)
-                    else -> if (compact) Text(if (game.startMillis > 0) dayTimeOf(game.startMillis) else "", color = C.Muted, fontSize = 10.sp)
+                    game.isLive -> if (compact) Text("● LIVE", color = C.Live, fontSize = 12.sp, fontWeight = FontWeight.Bold) else Pill("LIVE", C.Live, Color.White)
+                    game.isFinal -> if (compact) Text("FINAL", color = C.Faint, fontSize = 12.sp, fontWeight = FontWeight.Bold) else Pill("FINAL", C.Faint, C.Text)
+                    else -> if (compact) Text(if (game.startMillis > 0) dayTimeOf(game.startMillis) else "", color = C.Muted, fontSize = 12.sp)
                         else Pill(if (game.startMillis > 0) dayTimeOf(game.startMillis) else "UPCOMING", C.Surface2, C.Text)
                 }
                 Spacer(Modifier.width(6.dp))
                 Text(
                     if (game.isLive || game.isFinal) game.detail else game.broadcasts.take(2).joinToString(" · "),
-                    color = C.Muted, fontSize = if (compact) 10.sp else 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
+                    color = C.Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
                 )
-                if (followed) Text("🔔", fontSize = if (compact) 10.sp else 14.sp)
+                if (followed) Text("🔔", fontSize = if (compact) 12.sp else 14.sp)
             }
             Spacer(Modifier.height(if (compact) 3.dp else 10.dp))
             if (game.competitors.size == 2) {
@@ -189,7 +197,7 @@ fun GameCard(
             } else {
                 Text(game.title, color = C.Text, fontSize = if (compact) 13.sp else 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 game.competitors.take(if (compact) 1 else 3).forEachIndexed { i, c ->
-                    Text("${i + 1}. ${c.name}  ${if (spoilerFree) "" else c.score}", color = C.Muted, fontSize = if (compact) 11.sp else 14.sp, maxLines = 1)
+                    Text("${i + 1}. ${c.name}  ${if (spoilerFree) "" else c.score}", color = C.Muted, fontSize = if (compact) 12.sp else 14.sp, maxLines = 1)
                 }
             }
         }
@@ -262,10 +270,10 @@ private fun GridPoster(
         FocusCard(onClick = onClick, onFocus = { focused = true; onFocus?.invoke() }, onMenu = onMenu, scaleOnFocus = 1.04f,
             shape = RoundedCornerShape(10.dp),
             modifier = Modifier.fillMaxWidth().aspectRatio(2f / 3f).onFocusChanged { focused = it.hasFocus }) { _ ->
-            AsyncImage(model = hq ?: image, contentDescription = null, placeholder = ColorPainter(C.Surface2),
+            AsyncImage(model = hq ?: image, contentDescription = name, placeholder = ColorPainter(C.Surface2),
                 contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
             // Rating in the bottom-right corner of the poster.
-            if (badge != null) Text(badge, color = if (badgeColor == C.Live) Color.White else C.Text, fontSize = 11.sp, fontWeight = FontWeight.Bold,
+            if (badge != null) Text(badge, color = if (badgeColor == C.Live) Color.White else C.Text, fontSize = 12.sp, fontWeight = FontWeight.Bold,
                 modifier = Modifier.align(Alignment.BottomEnd).padding(6.dp)
                     .background(if (badgeColor == C.Live) C.Live else Color(0xCC0B0D10), RoundedCornerShape(6.dp))
                     .padding(horizontal = 6.dp, vertical = 2.dp))

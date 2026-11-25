@@ -114,7 +114,7 @@ fun HomeScreen(goTo: (Tab) -> Unit) {
         if (contMovies.isNotEmpty()) item {
             Column {
                 SectionTitle("Continue watching · Movies")
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 12.dp)) {
+                LazyRow(Modifier.rememberRowPosition(), horizontalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 12.dp)) {
                     items(contMovies.take(20), key = { it.key }) { p -> ProgressCard(p, onClick = { Play.resume(ctx, p) }) }
                 }
             }
@@ -122,7 +122,7 @@ fun HomeScreen(goTo: (Tab) -> Unit) {
         if (contSeries.isNotEmpty()) item {
             Column {
                 SectionTitle("Continue watching · Series")
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 12.dp)) {
+                LazyRow(Modifier.rememberRowPosition(), horizontalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 12.dp)) {
                     items(contSeries.take(20), key = { it.key }) { p -> ProgressCard(p, onClick = { Play.resume(ctx, p) }) }
                 }
             }
@@ -130,7 +130,7 @@ fun HomeScreen(goTo: (Tab) -> Unit) {
         if (watchItems.isNotEmpty()) item {
             Column {
                 SectionTitle("Your watchlist")
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 12.dp)) {
+                LazyRow(Modifier.rememberRowPosition(), horizontalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 12.dp)) {
                     items(watchItems, key = { (if (it is Movie) "m" else "s") + it.hashCode() }) { x ->
                         when (x) {
                             is Movie -> PosterCard(x.name, x.poster, onClick = { Pages.movie(x) }, kind = "movie", onMenu = { TitleOptions.show(OptTarget(movie = x)) })
@@ -143,7 +143,7 @@ fun HomeScreen(goTo: (Tab) -> Unit) {
         if (favList.isNotEmpty()) item {
             Column {
                 SectionTitle("On now · your favourites")
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 12.dp)) {
+                LazyRow(Modifier.rememberRowPosition(), horizontalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 12.dp)) {
                     items(favList, key = { it.key }) { c -> OnNowCard(c, onClick = { Play.channel(ctx, c, favList) }) }
                 }
             }
@@ -151,7 +151,7 @@ fun HomeScreen(goTo: (Tab) -> Unit) {
         if (mine.isNotEmpty()) item {
             Column {
                 SectionTitle("My Teams & followed games")
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 12.dp)) {
+                LazyRow(Modifier.rememberRowPosition(), horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 12.dp)) {
                     items(mine, key = { it.id }) { g -> GameCard(g, g.id in followed, spoilerFree, onClick = { openGame = g }, compact = true) }
                 }
             }
@@ -160,7 +160,7 @@ fun HomeScreen(goTo: (Tab) -> Unit) {
         if (liveNow.isNotEmpty()) item {
             Column {
                 SectionTitle("Live in your leagues")
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 12.dp)) {
+                LazyRow(Modifier.rememberRowPosition(), horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 12.dp)) {
                     items(liveNow, key = { it.id }) { g -> GameCard(g, g.id in followed, spoilerFree, onClick = { openGame = g }, compact = true) }
                 }
             }
@@ -168,7 +168,7 @@ fun HomeScreen(goTo: (Tab) -> Unit) {
         if (recentCh.isNotEmpty()) item {
             Column {
                 SectionTitle("Recently watched")
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 12.dp)) {
+                LazyRow(Modifier.rememberRowPosition(), horizontalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 12.dp)) {
                     items(recentCh, key = { it.key }) { c -> PosterCard(c.name, c.logo, wide = true, onClick = { Play.channel(ctx, c, recentCh) }) }
                 }
             }
@@ -176,7 +176,7 @@ fun HomeScreen(goTo: (Tab) -> Unit) {
         if (movies.isNotEmpty()) item {
             Column {
                 SectionTitle("Latest movie releases")
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 12.dp)) {
+                LazyRow(Modifier.rememberRowPosition(), horizontalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 12.dp)) {
                     items(latestMovies, key = { it.key }) { m -> PosterCard(m.name, m.poster, onClick = { openMovie = m }, kind = "movie", onMenu = { TitleOptions.show(OptTarget(movie = m)) }) }
                 }
             }
@@ -184,7 +184,7 @@ fun HomeScreen(goTo: (Tab) -> Unit) {
         if (yourSeries.isNotEmpty()) item {
             Column {
                 SectionTitle("Your series")
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 12.dp)) {
+                LazyRow(Modifier.rememberRowPosition(), horizontalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 12.dp)) {
                     items(yourSeries, key = { "${it.accountId}:${it.seriesId}" }) { s -> SeriesTile(s, onClick = { openSeries = s }) }
                 }
             }
@@ -232,7 +232,7 @@ fun OnNowCard(c: app.sideline.tv.data.Channel, onClick: () -> Unit) {
                 androidx.compose.foundation.layout.Box(Modifier.padding(top = 6.dp).fillMaxWidth().height(3.dp).background(C.Surface2)) {
                     androidx.compose.foundation.layout.Box(Modifier.fillMaxWidth(frac).height(3.dp).background(C.Accent))
                 }
-                Text("Ends ${timeOf(p.end * 1000)}" + (next?.let { "  ·  Next: ${it.title}" } ?: ""), color = C.Faint, fontSize = 11.sp,
+                Text("Ends ${timeOf(p.end * 1000)}" + (next?.let { "  ·  Next: ${it.title}" } ?: ""), color = C.Faint, fontSize = 12.sp,
                     maxLines = 1, modifier = Modifier.padding(top = 4.dp))
             }
         }
