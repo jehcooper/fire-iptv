@@ -23,7 +23,13 @@ data class GameDetail(
     val penaltiesByPeriod: List<Pair<String, List<String>>> = emptyList(),
     /** Hockey goalies: "TOR · Woll: 27 saves on 29 (.931)". */
     val goalies: List<String> = emptyList(),
+    /** Goals / touchdowns with a video to watch, grouped by period ("Goals" or "Scoring"). */
+    val clips: List<Pair<String, List<Clip>>> = emptyList(),
+    val clipWord: String = "Goals",
 )
+
+/** One goal/score you can watch: the NHL's own clip page when there is one, otherwise a YouTube search. */
+data class Clip(val line: String, val url: String?, val query: String, val words: List<String>)
 
 object GameDetails {
     suspend fun load(g: Game): GameDetail? {
@@ -32,6 +38,7 @@ object GameDetails {
             when {
                 l.path.startsWith("basketball") -> basketball(l, g)
                 l.id == "nhl" -> hockey(g)
+                l.path.startsWith("football") || l.path.startsWith("soccer") -> scoring(l, g)
                 else -> null
             }
         } catch (e: Exception) { null }
@@ -116,6 +123,22 @@ object GameDetails {
         val periods = plays.mapNotNull { it["periodDescriptor"].obj() }.distinctBy { it.s("number") }
             .filter { it.s("periodType") != "SO" }
 
+        // Each goal's NHL video (when the league has posted it) and a YouTube search as a fallback.
+        val dateText = java.text.SimpleDateFormat("MMM d yyyy", java.util.Locale.US).format(java.util.Date(if (g.startMillis > 0) g.startMillis else System.currentTimeMillis()))
+        val clipsByPeriod = periods.map { pd ->
+            val num = pd.s("number")
+            periodLabel(pd) to plays.filter { it.s("typeDescKey") == "goal" && it["periodDescriptor"].obj()?.s("number") == num }.map { p ->
+                val d = p["details"].obj()
+                val scorerFull = d?.s("scoringPlayerId")?.let { names[it] } ?: "Goal"
+                val last = scorerFull.substringAfter(". ")
+                val team = abbr(d?.s("eventOwnerTeamId"))
+                val url = d?.s("highlightClipSharingUrl")?.takeIf { it.startsWith("http") }
+                    ?: d?.s("highlightClip")?.let { "https://www.nhl.com/video/$it" }
+                Clip("$team · $scorerFull · ${p.s("timeInPeriod") ?: ""}", url,
+                    "$last goal ${g.away?.shortName ?: ""} vs ${g.home?.shortName ?: ""} $dateText", listOf(last))
+            }
+        }.filter { it.second.isNotEmpty() }
+
         // Goals by period.
         val goalsByPeriod = periods.map { pd ->
             val num = pd.s("number")
@@ -194,6 +217,37 @@ object GameDetails {
         return GameDetail(
             periodHeaders = periodHeaders, periodLines = periodLines, shotsLines = shotsLines,
             goalsByPeriod = goalsByPeriod, penaltiesByPeriod = penaltiesByPeriod, goalies = goalies,
+            clips = clipsByPeriod, clipWord = "Goals",
         )
+    }
+
+    // ---------------- Football & soccer (ESPN game summary → scoring plays) ----------------
+
+    private suspend fun scoring(l: League, g: Game): GameDetail {
+        val root = Net.getJson("https://site.api.espn.com/apis/site/v2/sports/${l.path}/summary?event=${g.id}").obj() ?: return GameDetail()
+        val soccer = l.path.startsWith("soccer")
+        val plays = root["scoringPlays"].arr()?.mapNotNull { it.obj() }
+            ?: root["keyEvents"].arr()?.mapNotNull { it.obj() }?.filter { (it["type"].obj()?.s("type") ?: "").contains("goal", true) }
+            ?: emptyList()
+        val vs = "${g.away?.shortName ?: g.away?.name ?: ""} vs ${g.home?.shortName ?: g.home?.name ?: ""}"
+        fun periodName(n: Int) = if (soccer) (if (n == 1) "1st half" else if (n == 2) "2nd half" else "Extra time")
+            else when (n) { 1 -> "1st quarter"; 2 -> "2nd quarter"; 3 -> "3rd quarter"; 4 -> "4th quarter"; else -> "Overtime" }
+        val rxScorer = Regex("\\.\\s*([^.(]+?)\\s*\\(")
+        val clips = plays.mapNotNull { p ->
+            val n = p["period"].obj()?.s("number")?.toIntOrNull() ?: 1
+            val team = p["team"].obj()?.let { it.s("abbreviation") ?: it.s("displayName") } ?: ""
+            val clock = p["clock"].obj()?.s("displayValue") ?: ""
+            val text = (p.s("text") ?: p.s("shortText") ?: "").trim()
+            val who = if (soccer) (p["participants"].arr()?.firstOrNull()?.obj()?.get("athlete").obj()?.s("displayName")
+                ?: rxScorer.find(text)?.groupValues?.get(1)?.trim() ?: "")
+                else text.substringBefore("(").trim()
+            if (text.isBlank() && who.isBlank()) return@mapNotNull null
+            val type = p["scoringType"].obj()?.s("displayName") ?: p["type"].obj()?.s("text") ?: if (soccer) "Goal" else ""
+            val line = listOf(team, if (soccer) (who.ifBlank { "Goal" }) else (if (type.isNotBlank()) "$type: " else "") + who, clock).filter { it.isNotBlank() }.joinToString(" · ")
+            val surname = who.split(" ").filter { it.length > 2 && it.first().isUpperCase() }.let { if (soccer) it.takeLast(1) else it.take(2) }
+            n to Clip(line, null, if (soccer) "$who goal $vs" else "$who $vs highlights", surname)
+        }
+        val grouped = clips.groupBy { it.first }.toSortedMap().map { (n, l2) -> periodName(n) to l2.map { it.second } }
+        return GameDetail(clips = grouped, clipWord = if (soccer) "Goals" else "Scoring")
     }
 }

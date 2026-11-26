@@ -39,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -354,7 +355,8 @@ private fun TitlePage(page: Page.Title) {
                     LazyRow(Modifier.rememberRowPosition(), horizontalArrangement = Arrangement.spacedBy(14.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 12.dp)) {
                         items(cast, key = { it.id + it.role }) { p ->
                             // Every cast card is the same size: two lines for the name, one for the character.
-                            FocusCard(onClick = { Pages.open(Page.Person(p.id, p.name, p.photo)) }, modifier = Modifier.width(124.dp).height(182.dp),
+                            FocusCard(onClick = { Pages.open(Page.Person(p.id, p.name, p.photo)) },
+                                modifier = Modifier.width(124.dp).height(182.dp).focusProperties { up = first },
                                 shape = RoundedCornerShape(14.dp)) { _ ->
                                 Column(Modifier.fillMaxSize().padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                                     AsyncImage(model = p.photo, contentDescription = null, contentScale = ContentScale.Crop,
@@ -377,7 +379,10 @@ private fun TitlePage(page: Page.Title) {
                 Column {
                     Text("More like this", color = C.Text, fontSize = 19.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 8.dp))
                     LazyRow(Modifier.rememberRowPosition(), horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 12.dp)) {
-                        items(libraryFirst(more, index), key = { it.tmdbId }) { t -> TitlePoster(t, index) }
+                        // ▲ from here goes straight up to the buttons (and the page scrolls to the top).
+                        items(libraryFirst(more, index), key = { it.tmdbId }) { t ->
+                            TitlePoster(t, index, modifier = if (cast.isEmpty()) Modifier.focusProperties { up = first } else Modifier)
+                        }
                     }
                 }
             }

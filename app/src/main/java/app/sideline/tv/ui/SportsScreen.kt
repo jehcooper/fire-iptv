@@ -321,6 +321,7 @@ private fun GameListRow(
 }
 
 /** Right-hand panel for the highlighted game. Every block can take focus, so ▲▼ scrolls through all of it. */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun SportsDetails(game: Game, first: FocusRequester, onMore: () -> Unit) {
     val ctx = LocalContext.current
@@ -359,12 +360,12 @@ private fun SportsDetails(game: Game, first: FocusRequester, onMore: () -> Unit)
             }
         }
         item(key = "actions") {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (game.isFinal) RecapChip(game, compact = true)
                 Chip(if (game.id in followed) "🔔 Pop-ups on" else "🔕 Pop-ups off", game.id in followed,
                     onClick = { prefs.toggleFollow(game.id) }, modifier = Modifier.focusRequester(first), compact = true)
                 Chip(if (game.id in pinned) "📌 Pinned" else "📌 Pin", game.id in pinned, onClick = { prefs.togglePin(game.id) }, compact = true)
                 Chip("Full screen", false, onClick = onMore, compact = true)
-                if (game.isFinal) RecapChip(game, compact = true)
             }
         }
         item(key = "ch-title") { Text("Channels showing it — OK to watch", color = C.Text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold) }
@@ -619,7 +620,13 @@ fun GameDetailView(d: app.sideline.tv.sports.GameDetail) {
         if (d.periodLines.isNotEmpty()) PeriodTable(if (d.shotsLines.isNotEmpty()) "Goals" else "Score", d.periodHeaders, d.periodLines)
         if (d.shotsLines.isNotEmpty()) PeriodTable("Shots on goal", d.periodHeaders, d.shotsLines)
         // One block per period, so ▲▼ can step through them and the list scrolls with you.
-        d.goalsByPeriod.forEach { (p, lines) ->
+        if (d.clips.isNotEmpty()) {
+            // Each goal / score is selectable: OK plays its video.
+            d.clips.forEach { (p, clips) ->
+                val lines = d.goalsByPeriod.firstOrNull { it.first == p }?.second
+                ClipBlock("${d.clipWord} · $p", clips.mapIndexed { i, c -> (lines?.getOrNull(i) ?: c.line) to c })
+            }
+        } else d.goalsByPeriod.forEach { (p, lines) ->
             DetailBlock("Goals · $p") { lines.forEach { Text(it, color = C.Text, fontSize = 13.sp) } }
         }
         d.penaltiesByPeriod.forEach { (p, lines) ->
@@ -684,20 +691,88 @@ fun RecapChip(game: Game, compact: Boolean = false) {
     val scope = rememberCoroutineScope()
     var msg by remember(game.id) { mutableStateOf<String?>(null) }
     var busy by remember(game.id) { mutableStateOf(false) }
+    var list by remember(game.id) { mutableStateOf<List<app.sideline.tv.data.Recaps.Video>?>(null) }
+    list?.let { vids ->
+        val names = listOfNotNull(game.away?.shortName, game.home?.shortName)
+        VideoListDialog(if (names.size == 2) "Recap: ${names[0]} @ ${names[1]}" else "Recap", vids) { list = null }
+    }
     Column {
-        Chip(if (busy) "Finding recap…" else "▶ Recap", false, compact = compact, onClick = {
+        Chip(if (busy) "Finding recap…" else "▶  Recap", true, compact = compact, onClick = {
             if (busy) return@Chip
             busy = true; msg = null
             scope.launch {
                 val r = app.sideline.tv.data.Recaps.find(game)
                 busy = false
-                if (r.videos.isNotEmpty()) {
-                    val names = listOfNotNull(game.away?.shortName, game.home?.shortName)
-                    app.sideline.tv.player.TrailerActivity.start(ctx, r.videos.take(5).map { it.id }, r.videos.take(5).map { it.title },
-                        if (names.size == 2) "Recap: ${names[0]} @ ${names[1]}" else "Recap")
-                } else msg = r.error
+                if (r.videos.isNotEmpty()) list = r.videos.take(4) else msg = r.error
             }
         })
         msg?.let { Text(it, color = C.Gold, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp).width(320.dp)) }
+    }
+}
+
+/** A period's goals/scores; each line can be selected and OK plays a video of it (NHL clip or YouTube). */
+@Composable
+private fun ClipBlock(title: String, rows: List<Pair<String, app.sideline.tv.sports.Clip>>) {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var msg by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf(-1) }
+    var choose by remember { mutableStateOf<Pair<String, List<app.sideline.tv.data.Recaps.Video>>?>(null) }
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(C.Surface2).padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text("$title  —  OK to watch", color = C.Text, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+        rows.forEachIndexed { i, (line, clip) ->
+            FocusCard(onClick = {
+                msg = null
+                if (clip.url != null) app.sideline.tv.player.TrailerActivity.startPage(ctx, clip.url, line)
+                else {
+                    busy = i
+                    scope.launch {
+                        val r = app.sideline.tv.data.Recaps.search(clip.query, System.currentTimeMillis() - 10 * 86_400_000L, clip.words)
+                        busy = -1
+                        if (r.videos.isNotEmpty()) choose = line to r.videos.take(5) else msg = r.error
+                    }
+                }
+            }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp), scaleOnFocus = 1f) { f ->
+                Row(Modifier.padding(horizontal = 8.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(if (busy == i) "…" else "▶", color = if (f) C.Accent else C.Faint, fontSize = 12.sp, modifier = Modifier.width(18.dp))
+                    Text(line, color = C.Text, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                }
+            }
+        }
+        msg?.let { Text(it, color = C.Gold, fontSize = 12.sp) }
+    }
+    choose?.let { (title2, vids) -> VideoListDialog(title2, vids) { choose = null } }
+}
+
+/** Short list of videos (title, channel, length); OK plays the chosen one (the rest follow with ▲▼). */
+@Composable
+fun VideoListDialog(title: String, vids: List<app.sideline.tv.data.Recaps.Video>, onDismiss: () -> Unit) {
+    val ctx = LocalContext.current
+    val first = remember { FocusRequester() }
+    LaunchedEffect(Unit) { delay(200); try { first.requestFocus() } catch (_: Exception) {} }
+    TvDialog(onDismiss) {
+        Box(Modifier.fillMaxSize().background(Color(0x99000000)), contentAlignment = Alignment.Center) {
+            Column(Modifier.width(680.dp).clip(RoundedCornerShape(16.dp)).background(C.Surface).padding(20.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(title, color = C.Text, fontSize = 19.sp, fontWeight = FontWeight.Bold, maxLines = 2)
+                Text("Pick a video · lengths shown on the right", color = C.Muted, fontSize = 13.sp, modifier = Modifier.padding(bottom = 6.dp))
+                vids.forEachIndexed { i, v ->
+                    FocusCard(onClick = {
+                        onDismiss()
+                        val order = listOf(v) + vids.filter { it.id != v.id }
+                        app.sideline.tv.player.TrailerActivity.start(ctx, order.map { it.id }, order.map { it.title }, title, order.map { it.length })
+                    }, modifier = Modifier.fillMaxWidth().let { if (i == 0) it.focusRequester(first) else it }, shape = RoundedCornerShape(10.dp), scaleOnFocus = 1.02f) { f ->
+                        Row(Modifier.padding(horizontal = 12.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(v.title, color = if (f) C.Text else C.Muted, fontSize = 15.sp, fontWeight = if (f) FontWeight.Bold else FontWeight.Medium, maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis)
+                                Text(v.channel, color = C.Faint, fontSize = 12.sp, maxLines = 1)
+                            }
+                            if (v.length.isNotBlank()) Text(v.length, color = C.Text, fontSize = 15.sp, fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(start = 12.dp).background(C.Surface2, RoundedCornerShape(6.dp)).padding(horizontal = 8.dp, vertical = 3.dp))
+                        }
+                    }
+                }
+            }
+        }
     }
 }

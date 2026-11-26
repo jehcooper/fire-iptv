@@ -156,7 +156,11 @@ private fun Sidebar(tab: Tab, onSelect: (Tab) -> Unit, build: Int) {
     val requesters = androidx.compose.runtime.remember { Tab.entries.associateWith { FocusRequester() } }
     Box(
         Modifier.fillMaxHeight().width(width)
-            .background(C.Rail)
+            // Open: solid on the left, fading to clear on the right. Closed: the plain strip.
+            .background(
+                if (expanded) Brush.horizontalGradient(0f to C.Rail, 0.45f to C.Rail.copy(alpha = 0.92f), 0.8f to C.Rail.copy(alpha = 0.45f), 1f to Color.Transparent)
+                else Brush.horizontalGradient(listOf(C.Rail, C.Rail)),
+            )
             .onFocusChanged { expanded = it.hasFocus }
             .focusProperties { enter = { requesters[tab] ?: FocusRequester.Default } }
             .focusGroup(),
@@ -189,7 +193,7 @@ private fun SideItem(t: Tab, selected: Boolean, expanded: Boolean, r: FocusReque
         // Selected = accent outline and accent text on a faint accent wash; selected-and-highlighted = white text.
         Box(
             Modifier.matchParentSize()
-                .background(when { f -> C.Surface2; selected -> C.Accent.copy(alpha = 0.14f); else -> C.Rail })
+                .background(when { f -> C.Surface2; selected -> C.Accent.copy(alpha = 0.14f); else -> Color.Transparent })
                 .border(if (selected) 1.5.dp else 0.dp, if (selected) C.Accent else Color.Transparent, RoundedCornerShape(10.dp)),
         )
         Row(
