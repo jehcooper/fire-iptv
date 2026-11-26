@@ -48,6 +48,8 @@ fun ChannelMenuHost() {
     val favs by prefs.favChannels.collectAsState()
     val names by prefs.channelNames.collectAsState()
     var renaming by remember(c.key) { mutableStateOf(false) }
+    var choosingGuide by remember(c.key) { mutableStateOf(false) }
+    val overrides by prefs.guideOverrides.collectAsState()
     val first = remember(c.key) { FocusRequester() }
     val isFav = c.key in favs
     val renamed = names.containsKey(c.key)
@@ -63,6 +65,16 @@ fun ChannelMenuHost() {
         )
         return
     }
+    if (choosingGuide) {
+        GuideChooser(c, onDone = { choosingGuide = false; close() }, onDismiss = { choosingGuide = false })
+        return
+    }
+    val guideName = when {
+        c.epgId == app.sideline.tv.data.NO_GUIDE -> "None"
+        c.epgId.isNullOrBlank() -> "None from provider"
+        else -> app.sideline.tv.data.FullGuide.displayName(c.epgId) ?: c.epgId!!
+    }
+    val wrongGuide = app.sideline.tv.data.FullGuide.mismatch(c)
     TvDialog({ close() }) {
         Box(Modifier.fillMaxSize().background(Color(0xB3000000)), contentAlignment = Alignment.Center) {
             Column(Modifier.width(460.dp).clip(RoundedCornerShape(18.dp)).background(C.Surface).padding(24.dp),
@@ -80,6 +92,8 @@ fun ChannelMenuHost() {
                     Chip("▲ Move up", false, onClick = { prefs.moveFavourite(c.key, -1) })
                     Chip("▼ Move down", false, onClick = { prefs.moveFavourite(c.key, 1) })
                 }
+                Chip("📺 Choose guide… (now: $guideName" + (if (overrides.containsKey(c.key)) ", your choice)" else ")"), false, onClick = { choosingGuide = true })
+                if (wrongGuide) Text("⚠ The provider's guide for this channel looks like it belongs to another channel.", color = C.Gold, fontSize = 12.sp)
                 Chip("✎ Rename", false, onClick = { renaming = true })
                 if (renamed) Chip("↺ Use provider's name", false, onClick = { prefs.renameChannel(c.key, null); close() })
                 Chip("🚫 Hide this channel", false, onClick = {
@@ -88,6 +102,52 @@ fun ChannelMenuHost() {
                         yes = "Hide", destructive = true) { prefs.toggleHiddenChannel(c.key) }
                 })
                 Chip("Close", false, onClick = { close() })
+            }
+        }
+    }
+}
+
+/**
+ * Pick which guide (TV listings) a channel uses: guide channels with similar names first, each with what's on now,
+ * plus "No guide" and "Provider's choice". Needs the full guide (Settings → TV guide).
+ */
+@Composable
+private fun GuideChooser(c: Channel, onDone: () -> Unit, onDismiss: () -> Unit) {
+    val prefs = SidelineApp.prefs
+    val G = app.sideline.tv.data.FullGuide
+    val first = remember { FocusRequester() }
+    val cands = remember(c.key) { G.candidates(c, 30) }
+    LaunchedEffect(Unit) { delay(200); try { first.requestFocus() } catch (_: Exception) {} }
+    fun pick(id: String?) {
+        prefs.setGuideOverride(c.key, id)
+        G.reload()
+        onDone()
+    }
+    TvDialog(onDismiss) {
+        Box(Modifier.fillMaxSize().background(Color(0xB3000000)), contentAlignment = Alignment.Center) {
+            Column(Modifier.width(640.dp).clip(RoundedCornerShape(18.dp)).background(C.Surface).padding(24.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("Guide for ${c.name}", color = C.Text, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                Text("Pick the listing that matches what the channel shows. \"Now:\" helps you tell them apart.",
+                    color = C.Muted, fontSize = 13.sp)
+                Spacer(Modifier.height(4.dp))
+                androidx.compose.foundation.lazy.LazyColumn(Modifier.height(380.dp), verticalArrangement = Arrangement.spacedBy(6.dp),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 8.dp)) {
+                    item { Chip("↺ Provider's choice" + (if (!prefs.guideOverrides.value.containsKey(c.key)) "  ✓" else ""), false,
+                        modifier = Modifier.focusRequester(first), onClick = { pick(null) }) }
+                    item { Chip("🚫 No guide for this channel", false, onClick = { pick("-") }) }
+                    if (!G.hasNames) item {
+                        Text("Turn on the full guide (Settings → TV guide) to see guide channels to choose from.", color = C.Gold, fontSize = 13.sp)
+                    } else if (cands.isEmpty()) item {
+                        Text("No guide channels with a similar name.", color = C.Faint, fontSize = 13.sp)
+                    }
+                    items(cands.size) { i ->
+                        val k = cands[i]
+                        val mark = if (c.epgId?.lowercase() == k.id) "  ✓" else ""
+                        Chip(k.name + mark + (k.now?.let { "   ·   Now: $it" } ?: ""), false, onClick = { pick(k.id) })
+                    }
+                }
+                Chip("Cancel", false, onClick = onDismiss)
             }
         }
     }

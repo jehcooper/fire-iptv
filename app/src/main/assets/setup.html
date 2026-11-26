@@ -153,10 +153,12 @@ function rKeys(){
    <label>API key</label><input type="text" id="osKey" value="${esc(k.osKey)}" autocapitalize="off">
    <div class="row"><div><label>Username</label><input type="text" id="osUser" value="${esc(k.osUser)}" autocapitalize="off"></div>
    <div><label>Password</label><input type="text" id="osPass" value="${esc(k.osPass)}" autocapitalize="off"></div></div></div>
-  <div class="card"><h2>Trakt</h2><p>Create a free app at <a style="color:#a3abb8" href="https://trakt.tv/oauth/applications/new" target="_blank">trakt.tv → Your API Apps → New application</a>.
-   Name: Empire TV · Redirect URI: <b>urn:ietf:wg:oauth:2.0:oob</b>. Paste its Client ID and Client Secret here, Save, then on the TV choose Settings → Trakt → Connect Trakt.</p>
+  <div class="card"><h2>Trakt</h2><p>1. Open <a style="color:#a3abb8" href="https://developer.trakt.tv/apps" target="_blank">developer.trakt.tv/apps</a> and sign in with Trakt (connect your GitHub account once if asked).<br>
+   2. Create an app: Name <b>Empire TV</b>; any https address as the Redirect URI (it isn't used), e.g. https://github.com/jehcooper/fire-iptv.<br>
+   3. Paste its <b>Client ID</b> here and Save. New apps have <b>no Client Secret</b> — leave that box empty unless your app is older and shows one.<br>
+   4. On the TV: Settings → Trakt → Connect Trakt, then enter the code at trakt.tv/activate.</p>
    <label>Client ID</label><input type="text" id="traktId" value="${esc(k.traktId)}" autocapitalize="off">
-   <label>Client Secret</label><input type="text" id="traktSecret" value="${esc(k.traktSecret)}" autocapitalize="off"></div>
+   <label>Client Secret (older apps only — usually empty)</label><input type="text" id="traktSecret" value="${esc(k.traktSecret)}" autocapitalize="off"></div>
   <div class="card"><h2>YouTube (game recaps)</h2><p>Free key: <a style="color:#a3abb8" href="https://console.cloud.google.com/" target="_blank">console.cloud.google.com</a> → create a project → APIs &amp; Services → Library → enable <b>YouTube Data API v3</b> → Credentials → Create credentials → API key. Paste it here.</p>
    <input type="text" id="youtube" value="${esc(k.youtube)}" autocapitalize="off"></div>`;
 }

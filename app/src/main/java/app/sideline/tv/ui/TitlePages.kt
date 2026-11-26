@@ -173,6 +173,8 @@ private fun TitlePage(page: Page.Title) {
     val traktMovies by Trakt.watchedMovies.collectAsState()
     val done by SidelineApp.progress.done.collectAsState()
     val syncSet by prefs.traktSync.collectAsState()
+    val syncAll by prefs.traktSyncAll.collectAsState()
+    val syncExclude by prefs.traktExclude.collectAsState()
     val ratings by Trakt.ratings.collectAsState()
     val traktToken by prefs.traktToken.collectAsState()
     LaunchedEffect(Unit) { Trakt.refreshWatched() }
@@ -291,14 +293,13 @@ private fun TitlePage(page: Page.Title) {
                                 Chip(if (inList) "✓ On watchlist" else "+ Watchlist", inList, onClick = { prefs.toggleWatchlist(wKey) })
                             }
                             if (id != null) {
-                                val synced = Trakt.syncKey(isTv, id) in syncSet
+                                val synced = if (syncAll) Trakt.syncKey(isTv, id) !in syncExclude else Trakt.syncKey(isTv, id) in syncSet
                                 Chip(if (traktToken.isBlank()) "Trakt: not connected" else if (synced) "✓ Syncing to Trakt" else "Sync to Trakt", synced,
                                     onClick = {
                                         if (traktToken.isBlank()) traktHint = "Connect Trakt in Settings → Trakt first."
                                         else {
-                                            prefs.toggleTraktSync(Trakt.syncKey(isTv, id))
-                                            traktHint = if (!synced) "This title now syncs to Trakt: watching, watched progress and ratings." else "Stopped syncing this title."
-                                            Trakt.refreshWatched(force = true)
+                                            Trakt.toggleSync(isTv, id)
+                                            traktHint = if (!synced) "This title now syncs to Trakt: watching, watched progress and ratings." else "This title is left out of Trakt syncing."
                                         }
                                     }, modifier = fm("trakt"))
                                 if (synced && traktToken.isNotBlank()) {

@@ -1,5 +1,7 @@
 package app.sideline.tv.data
 
+import kotlinx.coroutines.sync.withPermit
+
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -85,8 +87,9 @@ object Discover {
                         }
                     }.awaitAll()
                 }
-                if (result.any { it.second.isNotEmpty() }) {
-                    _raw.value = result
+                val merged = try { withTrakt(result) } catch (e: Exception) { result }
+                if (merged.any { it.second.isNotEmpty() }) {
+                    _raw.value = merged
                     loadedAt = System.currentTimeMillis()
                     _status.value = ""
                 } else _status.value = Tmdb.lastError.value ?: "Couldn't get lists from TMDB. Try Refresh in a minute."
@@ -94,6 +97,79 @@ object Discover {
                 _status.value = Tmdb.lastError.value ?: (e.message ?: "Couldn't reach TMDB")
             } finally { loading = false }
         }
+    }
+
+    // ---------------- Trakt's lists, mixed in ----------------
+
+    private val tmdbTitles = java.util.concurrent.ConcurrentHashMap<String, Title>()
+
+    /** A Trakt title filled in from TMDB (poster, score, overview), looked up once. */
+    private suspend fun fill(t: Title, known: Map<String, Title>, gate: kotlinx.coroutines.sync.Semaphore): Title? {
+        val k = (if (t.isTv) "tv:" else "m:") + t.tmdbId
+        known[k]?.let { return it }
+        tmdbTitles[k]?.let { return it }
+        return gate.withPermit {
+            try {
+                val o = Tmdb.get(if (t.isTv) "tv/${t.tmdbId}" else "movie/${t.tmdbId}").obj() ?: return@withPermit null
+                Title(
+                    tmdbId = t.tmdbId, isTv = t.isTv,
+                    title = o.s("title") ?: o.s("name") ?: t.title,
+                    year = (o.s("release_date") ?: o.s("first_air_date") ?: t.year).take(4),
+                    overview = o.s("overview") ?: "",
+                    poster = img(o.s("poster_path"), "w342"), backdrop = img(o.s("backdrop_path"), "w1280"),
+                    score = o.s("vote_average")?.toDoubleOrNull(),
+                    genreIds = o["genres"].arr()?.mapNotNull { it.obj()?.s("id") } ?: emptyList(),
+                    popularity = o.s("popularity")?.toDoubleOrNull() ?: 0.0,
+                ).also { tmdbTitles[k] = it }
+            } catch (e: Exception) { null }
+        }
+    }
+
+    /** One from each list in turn, no repeats. */
+    private fun interleave(a: List<Title>, b: List<Title>): List<Title> {
+        val out = LinkedHashMap<String, Title>()
+        for (i in 0 until maxOf(a.size, b.size)) {
+            a.getOrNull(i)?.let { out.putIfAbsent((if (it.isTv) "tv:" else "m:") + it.tmdbId, it) }
+            b.getOrNull(i)?.let { out.putIfAbsent((if (it.isTv) "tv:" else "m:") + it.tmdbId, it) }
+        }
+        return out.values.toList()
+    }
+
+    /**
+     * Adds Trakt's trending and popular titles to the matching TMDB rows, plus Trakt's "most watched this week" and
+     * "most anticipated" rows. Only when a Trakt Client ID is set (no sign-in needed).
+     */
+    private suspend fun withTrakt(tmdb: List<Pair<String, List<Title>>>): List<Pair<String, List<Title>>> {
+        if (!Trakt.hasApp) return tmdb
+        val known = HashMap<String, Title>()
+        tmdb.forEach { (_, l) -> l.forEach { known[(if (it.isTv) "tv:" else "m:") + it.tmdbId] = it } }
+        val gate = kotlinx.coroutines.sync.Semaphore(8)
+        suspend fun list(path: String, tv: Boolean): List<Title> = coroutineScope {
+            Trakt.publicList(path, tv).map { t -> async { fill(t, known, gate) } }.awaitAll().filterNotNull()
+        }
+        val lists = coroutineScope {
+            listOf(
+                "tm" to async { list("/movies/trending", false) }, "ts" to async { list("/shows/trending", true) },
+                "pm" to async { list("/movies/popular", false) }, "ps" to async { list("/shows/popular", true) },
+                "wm" to async { list("/movies/watched/weekly", false) }, "ws" to async { list("/shows/watched/weekly", true) },
+                "am" to async { list("/movies/anticipated", false) }, "as" to async { list("/shows/anticipated", true) },
+            ).associate { (k, d) -> k to d.await() }
+        }
+        val mix = mapOf(
+            "Trending movies this week" to "tm", "Trending series this week" to "ts",
+            "Popular movies" to "pm", "Popular series" to "ps",
+        )
+        val out = tmdb.map { (name, l) -> mix[name]?.let { k -> name to interleave(l, lists[k].orEmpty()) } ?: (name to l) }.toMutableList()
+        fun add(name: String, k: String, after: String?) {
+            val l = lists[k].orEmpty(); if (l.isEmpty()) return
+            val i = after?.let { a -> out.indexOfFirst { it.first == a } } ?: -1
+            if (i >= 0) out.add(i + 1, name to l) else out.add(name to l)
+        }
+        add("Most watched movies this week · Trakt", "wm", "Trending movies this week")
+        add("Most watched series this week · Trakt", "ws", "Trending series this week")
+        add("Most anticipated movies · Trakt", "am", null)
+        add("Most anticipated series · Trakt", "as", null)
+        return out
     }
 
     // ---------------- Matching TMDB titles to your library ----------------

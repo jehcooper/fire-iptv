@@ -222,6 +222,28 @@ fun ProgressCard(p: ProgressEntry, onClick: () -> Unit, modifier: Modifier = Mod
     }
 }
 
+/** Up Next (from Trakt): the next episode to watch of a show you follow. OK plays it; ≡ for the show's options. */
+@Composable
+fun UpNextCard(u: app.sideline.tv.data.Trakt.UpNext, modifier: Modifier = Modifier) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val art = rememberTmdbArt(u.series.name, true)
+    var focused by remember { mutableStateOf(false) }
+    Column(modifier.width(250.dp)) {
+        FocusCard(onClick = { app.sideline.tv.player.Play.episode(ctx, u.episode, u.series.name, u.series.seriesId, u.series.cover) },
+            onMenu = { TitleOptions.show(OptTarget(series = u.series)) }, scaleOnFocus = 1.04f, shape = RoundedCornerShape(10.dp),
+            modifier = Modifier.fillMaxWidth().height(141.dp).onFocusChanged { focused = it.hasFocus }) { _ ->
+            AsyncImage(model = u.episode.image ?: art?.backdrop ?: u.series.cover, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+            Text("UP NEXT", color = C.OnAccent, fontSize = 10.sp, fontWeight = FontWeight.Bold,
+                modifier = Modifier.align(Alignment.TopStart).padding(8.dp).background(C.Accent, RoundedCornerShape(5.dp)).padding(horizontal = 6.dp, vertical = 2.dp))
+        }
+        Text(MovieInfoService.cleanTitle(u.series.name).first, color = if (focused) C.Accent else C.Text, fontSize = 15.sp,
+            fontWeight = if (focused) FontWeight.Bold else FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 8.dp, start = 2.dp))
+        Text(u.label + if (focused) "  ·  ≡ options" else "", color = C.Faint, fontSize = 12.sp, maxLines = 1,
+            overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 2.dp))
+    }
+}
+
 /** "1 h 12 min" / "17 min" for time left. */
 fun fmtLeft(ms: Long): String {
     val m = (ms / 60_000).toInt()

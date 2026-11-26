@@ -283,22 +283,32 @@ fun SettingsScreen() {
                 val user by prefs.traktUser.collectAsState()
                 val cid by prefs.traktClientId.collectAsState()
                 val secret by prefs.traktSecret.collectAsState()
-                Text("Keep track of what you watch on trakt.tv. Only titles you switch \"Sync to Trakt\" on (on each movie or series page) are synced: " +
-                    "watching now, watched episodes/movies (from about 80% through), and your ratings. Episodes you watched elsewhere show ✓ here.",
+                val syncAll by prefs.traktSyncAll.collectAsState()
+                Text("Keep track of what you watch on trakt.tv: watching now, watched episodes and movies (from about 80% through), " +
+                    "your ratings, your watchlist (both ways), where you stopped (carry on from any device), Up Next on Home, " +
+                    "and a pop-up when a new episode of a show you follow reaches your library.",
                     color = C.Muted, fontSize = 14.sp)
-                Text("One-time setup: on a computer or phone, sign in at trakt.tv → Settings → Your API Apps → New application. Name: Empire TV. " +
-                    "Redirect URI: urn:ietf:wg:oauth:2.0:oob. Save, then copy the Client ID and Client Secret here (easiest with \"Set up from phone\").",
+                Text("One-time setup, on a phone or computer: sign in at developer.trakt.tv/apps (connect your GitHub account once when asked), " +
+                    "create an app named Empire TV and copy its Client ID here (easiest with \"Set up from phone\"). New Trakt apps have no " +
+                    "Client Secret — that's normal; only add one if your app is older and shows one.",
                     color = C.Faint, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp))
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Chip(if (cid.isBlank()) "Add Client ID" else "Client ID ✓", false, onClick = { editTraktId = true })
-                    Chip(if (secret.isBlank()) "Add Client Secret" else "Client Secret ✓", false, onClick = { editTraktSecret = true })
-                    if (token.isBlank()) Chip("Connect Trakt", cid.isNotBlank() && secret.isNotBlank(), onClick = { traktLogin = true })
+                    Chip(if (secret.isBlank()) "Client Secret (older apps only)" else "Client Secret ✓", false, onClick = { editTraktSecret = true })
+                    if (token.isBlank()) Chip("Connect Trakt", cid.isNotBlank(), onClick = { traktLogin = true })
                     else Chip("Disconnect ${user.ifBlank { "Trakt" }}", false, onClick = {
                         Confirm.ask("Disconnect Trakt?", "Nothing is deleted on Trakt; Empire TV just stops syncing.", "Disconnect", destructive = true) { app.sideline.tv.data.Trakt.signOut() }
                     })
                 }
-                if (token.isNotBlank()) Text("Connected" + (if (user.isNotBlank()) " as $user" else "") + " · ${prefs.traktSync.collectAsState().value.size} titles syncing",
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 8.dp)) {
+                    Chip(if (syncAll) "Sync: every title" else "Sync: only titles I choose", syncAll, onClick = { prefs.setTraktSyncAll(!syncAll) })
+                }
+                Text(if (syncAll) "Every movie and series syncs. To leave one out: ≡ on it → \"Trakt: leave this title out\"."
+                    else "Only titles you switch on sync (≡ on a title → \"Trakt: sync this title\").",
+                    color = C.Faint, fontSize = 13.sp, modifier = Modifier.padding(top = 6.dp))
+                if (token.isNotBlank()) Text("Connected" + (if (user.isNotBlank()) " as $user" else "") +
+                    (if (syncAll) " · ${prefs.traktExclude.collectAsState().value.size} titles left out" else " · ${prefs.traktSync.collectAsState().value.size} titles syncing"),
                     color = C.Accent, fontSize = 14.sp, modifier = Modifier.padding(top = 6.dp))
             }
         }
@@ -438,9 +448,9 @@ fun SettingsScreen() {
         "TMDB API key or Read Access Token", prefs.tmdbKey.value, { prefs.setTmdbKey(it) },
     ) { editTmdb = false }
     if (backupOpen) BackupDialog { backupOpen = false }
-    if (editTraktId) KeyEditor("Trakt Client ID", "From trakt.tv → Settings → Your API Apps → Empire TV.", "Client ID",
+    if (editTraktId) KeyEditor("Trakt Client ID", "From developer.trakt.tv/apps → Empire TV → Client ID.", "Client ID",
         prefs.traktClientId.value, { prefs.setTraktApp(it, prefs.traktSecret.value) }) { editTraktId = false }
-    if (editTraktSecret) KeyEditor("Trakt Client Secret", "From trakt.tv → Settings → Your API Apps → Empire TV.", "Client Secret",
+    if (editTraktSecret) KeyEditor("Trakt Client Secret", "Only for Trakt apps made before October 2026 that show a Client Secret. Leave empty otherwise.", "Client Secret",
         prefs.traktSecret.value, { prefs.setTraktApp(prefs.traktClientId.value, it) }) { editTraktSecret = false }
     if (traktLogin) TraktLoginDialog { traktLogin = false }
     if (editYoutube) KeyEditor("YouTube key", "From console.cloud.google.com → Credentials (YouTube Data API v3 enabled).", "API key",
@@ -903,10 +913,10 @@ private fun TraktLoginDialog(onDone: () -> Unit) {
     val close = remember { FocusRequester() }
     LaunchedEffect(Unit) {
         val dc = app.sideline.tv.data.Trakt.startSignIn()
-        if (dc == null) { result = status.ifBlank { "Couldn't start sign-in. Check the Client ID." }; return@LaunchedEffect }
+        if (dc == null) { result = app.sideline.tv.data.Trakt.status.value.ifBlank { "Couldn't start sign-in. Check the Client ID." }; return@LaunchedEffect }
         code = dc
-        result = if (app.sideline.tv.data.Trakt.waitForSignIn(dc)) "✓ Connected to Trakt. Now switch \"Sync to Trakt\" on for the titles you want."
-            else "The code expired or was refused. Try again."
+        result = if (app.sideline.tv.data.Trakt.waitForSignIn(dc)) "✓ Connected to Trakt. Your watchlist and progress will sync in a minute."
+            else app.sideline.tv.data.Trakt.status.value.ifBlank { "The code expired or was refused. Try again." }
     }
     LaunchedEffect(Unit) { delay(200); try { close.requestFocus() } catch (_: Exception) {} }
     TvDialog(onDone) {

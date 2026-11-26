@@ -52,6 +52,18 @@ object Standings {
                 node["children"].arr()?.mapNotNull { it.obj() }?.forEach { walk(it, name) }
             }
             walk(root, null)
+            // Some ESPN feeds leave out the conference splits; ask the fuller feed the ESPN website uses.
+            if (isCollege(base) && groups.isNotEmpty() && groups.all { g -> g.rows.all { it.confW == null } }) {
+                try {
+                    val web = Net.getJson("https://site.web.api.espn.com/apis/v2/sports/${base.path}/standings?region=us&lang=en&contentorigin=espn&type=0&level=1" +
+                        (if (base.id == "ncaaf") "&group=80" else "")).obj()
+                    if (web != null) {
+                        val before = groups.toList(); groups.clear()
+                        walk(web, null)
+                        if (groups.isEmpty() || groups.all { g -> g.rows.all { it.confW == null } }) { groups.clear(); groups += before }
+                    }
+                } catch (_: Exception) {}
+            }
             val sorted = groups.map { g -> g.copy(rows = sort(base, g.rows).mapIndexed { i, r -> r.copy(officialRank = i + 1) }) }
             cache[base.id] = System.currentTimeMillis() to sorted
             sorted
@@ -88,10 +100,18 @@ object Standings {
         fun num(vararg keys: String) = stat(*keys)?.let { it.s("value") ?: it.s("displayValue") }?.toDoubleOrNull()?.toInt()
         fun rec(o: JsonObject?) = (o?.s("summary") ?: o?.s("displayValue"))?.trim()?.let { RX_REC.find(it) }?.groupValues
         val overall = rec(stat("overall", "total"))
-        val confStat = list.firstOrNull { o ->
-            listOf(o.s("type"), o.s("name"), o.s("abbreviation"), o.s("displayName")).any { it?.contains("conf", true) == true }
-        }
-        val conf = rec(confStat)
+        // Conference record: ESPN lists several conference numbers (record "5-1", win %, games behind…). Use the one
+        // that is actually a record; failing that, build it from the separate conference win/loss counts.
+        fun isConf(o: JsonObject) = listOf(o.s("type"), o.s("name"), o.s("abbreviation"), o.s("displayName"), o.s("description"))
+            .any { it?.contains("conf", true) == true }
+        val conf = list.filter { isConf(it) }.firstNotNullOfOrNull { rec(it) }
+            ?: run {
+                fun confNum(word: String) = list.firstOrNull { o ->
+                    isConf(o) && (o.s("name") ?: o.s("type") ?: "").let { n -> n.contains(word, true) && !n.contains("percent", true) && !n.contains("behind", true) }
+                }?.let { (it.s("value") ?: it.s("displayValue"))?.toDoubleOrNull()?.toInt() }
+                val cw = confNum("wins"); val cl = confNum("losses")
+                if (cw != null && cl != null) listOf("$cw-$cl", cw.toString(), cl.toString(), (confNum("ties") ?: 0).toString()) else null
+            }
         var wins = num("wins"); var losses = num("losses"); var ties = num("ties") ?: 0
         // College tables: overall record from its own summary (the plain "wins" can be a different split).
         if (college && overall != null) { wins = overall[1].toInt(); losses = overall[2].toInt(); ties = overall[3].toIntOrNull() ?: 0 }

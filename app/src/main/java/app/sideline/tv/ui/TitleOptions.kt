@@ -96,6 +96,8 @@ fun TitleOptionsHost() {
     val favSeries by prefs.favSeries.collectAsState()
     val done by SidelineApp.progress.done.collectAsState()
     val syncSet by prefs.traktSync.collectAsState()
+    val syncAll by prefs.traktSyncAll.collectAsState()
+    val syncExclude by prefs.traktExclude.collectAsState()
     val traktToken by prefs.traktToken.collectAsState()
     val traktMovies by Trakt.watchedMovies.collectAsState()
     val traktEps by Trakt.watchedEps.collectAsState()
@@ -119,7 +121,8 @@ fun TitleOptionsHost() {
     }
     // Mark watched: a movie, or the episode on a Continue-watching card.
     val id = tmdbId
-    val synced = id != null && Trakt.syncKey(isTv, id) in syncSet && traktToken.isNotBlank()
+    val synced = id != null && traktToken.isNotBlank() &&
+        (if (syncAll) Trakt.syncKey(isTv, id) !in syncExclude else Trakt.syncKey(isTv, id) in syncSet)
     if (movie != null || p?.kind == "episode") {
         val key = p?.key ?: movie?.let { Play.movieKey(it) }!!
         val traktW = id != null && (if (p?.kind == "episode") "${p.season}:${p.episode}" in traktEps[id].orEmpty() else id in traktMovies)
@@ -139,7 +142,7 @@ fun TitleOptionsHost() {
         opts += Opt(if (fav) "☆  Remove from favourite series" else "★  Favourite series") { prefs.toggleFavSeries(fk); close() }
     }
     if (traktToken.isNotBlank() && id != null) {
-        opts += Opt(if (synced) "Trakt: stop syncing" else "Trakt: sync this title") { prefs.toggleTraktSync(Trakt.syncKey(isTv, id)); Trakt.refreshWatched(force = true); close() }
+        opts += Opt(if (synced) "Trakt: leave this title out" else "Trakt: sync this title") { Trakt.toggleSync(isTv, id); close() }
         if (synced) {
             val r = ratings[Trakt.syncKey(isTv, id)]
             opts += Opt(if (r != null) "♥  Your rating: $r/10 (change)" else "♡  Rate on Trakt") { rating = true }

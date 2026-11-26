@@ -74,6 +74,7 @@ class MainActivity : ComponentActivity() {
         super.onStart()
         AppOpens.count.value += 1
         SidelineApp.repo.checkAccounts(force = true)
+        app.sideline.tv.data.Trakt.onAppOpen()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -137,6 +138,7 @@ private fun Root() {
         Sidebar(tab, onSelect = { tab = it }, build = build)
         ScorePopupHost()
         ReminderHost()
+        NewEpisodeHost()
         ChannelMenuHost()
         PagesHost()
         TitleOptionsHost()

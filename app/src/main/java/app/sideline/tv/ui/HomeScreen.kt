@@ -52,6 +52,7 @@ fun HomeScreen(goTo: (Tab) -> Unit) {
     val favCh by prefs.favChannels.collectAsState()
     val errors by repo.errors.collectAsState()
     val progress by SidelineApp.progress.entries.collectAsState()
+    val upNext by app.sideline.tv.data.Trakt.upNext.collectAsState()
     var openGame by remember { mutableStateOf<Game?>(null) }
     var openMovie by remember { mutableStateOf<app.sideline.tv.data.Movie?>(null) }
     var openSeries by remember { mutableStateOf<app.sideline.tv.data.Series?>(null) }
@@ -125,6 +126,14 @@ fun HomeScreen(goTo: (Tab) -> Unit) {
                 SectionTitle("Continue watching · Series")
                 LazyRow(Modifier.rememberRowPosition(), horizontalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 12.dp)) {
                     items(contSeries.take(20), key = { it.key }) { p -> ProgressCard(p, onClick = { Play.resume(ctx, p) }) }
+                }
+            }
+        }
+        if (upNext.isNotEmpty()) item {
+            Column {
+                SectionTitle("Up next · from Trakt")
+                LazyRow(Modifier.rememberRowPosition(), horizontalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 12.dp)) {
+                    items(upNext.take(20), key = { "un:${it.series.accountId}:${it.episode.id}" }) { u -> UpNextCard(u) }
                 }
             }
         }

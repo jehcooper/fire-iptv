@@ -65,6 +65,12 @@ class WatchProgress(context: Context) {
 
     fun remove(key: String) = save(_entries.value.filter { it.key != key })
 
+    /** Adds a place saved on another device (via Trakt), kept in date order; replaces older ones for the same title. */
+    fun merge(e: ProgressEntry) {
+        val rest = _entries.value.filter { it.key != e.key && !(e.kind == "episode" && it.kind == "episode" && it.seriesId == e.seriesId && it.accountId == e.accountId) }
+        save((rest + e).sortedByDescending { it.updated }.take(40))
+    }
+
     private val _done = MutableStateFlow(sp.getStringSet("done", emptySet())!!.toSet())
     /** Keys of movies/episodes you watched to the end (for ✓ marks). */
     val done: StateFlow<Set<String>> = _done

@@ -723,14 +723,26 @@ private fun ClipBlock(title: String, rows: List<Pair<String, app.sideline.tv.spo
         rows.forEachIndexed { i, (line, clip) ->
             FocusCard(onClick = {
                 msg = null
-                if (clip.url != null) app.sideline.tv.player.TrailerActivity.startPage(ctx, clip.url, line)
-                else {
-                    busy = i
-                    scope.launch {
-                        val r = app.sideline.tv.data.Recaps.search(clip.query, System.currentTimeMillis() - 10 * 86_400_000L, clip.words)
-                        busy = -1
-                        if (r.videos.isNotEmpty()) choose = line to r.videos.take(5) else msg = r.error
+                if (busy >= 0) return@FocusCard
+                busy = i
+                scope.launch {
+                    // 1) The NHL's own clip, played directly in our player.
+                    val nhl = if (clip.nhlId != null || clip.url != null) {
+                        msg = "Getting the NHL clip…"
+                        app.sideline.tv.data.ClipVideo.nhl(ctx, clip.nhlId, clip.url)
+                    } else null
+                    // 2) ESPN's highlight video of it.
+                    val src = nhl ?: clip.direct?.let { app.sideline.tv.data.ClipVideo.espn(it) }
+                    if (src != null) {
+                        busy = -1; msg = null
+                        app.sideline.tv.player.ClipPlayerActivity.start(ctx, src.url, line, src.hls)
+                        return@launch
                     }
+                    // 3) YouTube.
+                    msg = null
+                    val r = app.sideline.tv.data.Recaps.search(clip.query, System.currentTimeMillis() - 10 * 86_400_000L, clip.words)
+                    busy = -1
+                    if (r.videos.isNotEmpty()) choose = line to r.videos.take(5) else msg = r.error ?: "No video of this one yet."
                 }
             }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp), scaleOnFocus = 1f) { f ->
                 Row(Modifier.padding(horizontal = 8.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {

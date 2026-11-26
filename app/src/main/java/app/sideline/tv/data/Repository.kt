@@ -67,14 +67,17 @@ class Repository(private val prefs: Prefs) {
     fun applyEdits() {
         val names = prefs.channelNames.value
         val hidden = prefs.hiddenChannels.value
+        val guides = prefs.guideOverrides.value
         val visible = rawChannels.filter { it.key !in hidden }.map { c ->
-            names[c.key]?.let { c.copy(name = it, origName = c.name) } ?: c
+            val renamed = names[c.key]?.let { c.copy(name = it, origName = c.name) } ?: c
+            // Your guide choice for this channel ("-" = no guide).
+            guides[c.key]?.let { g -> renamed.copy(epgId = if (g == "-") NO_GUIDE else g) } ?: renamed
         }
         val norm = visible.associate { it.key to normalizeChannelName(it.baseName) }
         normNames = norm
         lowerNames = visible.associate { it.key to it.baseName.lowercase() }
         byKey = visible.associateBy { it.key }
-        byEpg = visible.filter { !it.epgId.isNullOrBlank() }.groupBy { it.epgId!!.lowercase() }
+        byEpg = visible.filter { !it.epgId.isNullOrBlank() && it.epgId != NO_GUIDE }.groupBy { it.epgId!!.lowercase() }
         twins = visible.groupBy { norm[it.key] ?: "" }
         slots = visible.mapNotNull { c -> channelSlot(c.baseName)?.let { "${c.accountId}|$it" to c } }
             .groupBy({ it.first }, { it.second })
@@ -253,17 +256,23 @@ class Repository(private val prefs: Prefs) {
     fun categoryName(c: Channel): String =
         liveCategories.value.firstOrNull { it.accountId == c.accountId && it.id == c.categoryId }?.name ?: ""
 
-    suspend fun epg(c: Channel, limit: Int = 4): List<EpgItem> = client(c.accountId)?.shortEpg(c.streamId, limit) ?: emptyList()
+    suspend fun epg(c: Channel, limit: Int = 4): List<EpgItem> {
+        if (c.epgId == NO_GUIDE || prefs.guideOverrides.value.containsKey(c.key)) return epgCached(c).take(limit)
+        return client(c.accountId)?.shortEpg(c.streamId, limit) ?: emptyList()
+    }
 
     suspend fun epgCached(c: Channel): List<EpgItem> {
+        if (c.epgId == NO_GUIDE) return emptyList()
         // Full guide (several days) when it's loaded and covers this channel.
         FullGuide.forChannel(c.epgId)?.let { full ->
             val nowS = System.currentTimeMillis() / 1000
             return full.filter { it.end > nowS - 12 * 3600 }
         }
+        // You picked a different guide for this channel: the provider's own now & next would be the wrong one.
+        if (prefs.guideOverrides.value.containsKey(c.key)) return emptyList()
         val now = System.currentTimeMillis()
         epgCache[c.key]?.let { (t, items) -> if (now - t < 10 * 60_000) return items }
-        val items = epgGate.withPermit { epg(c, 12) }
+        val items = epgGate.withPermit { client(c.accountId)?.shortEpg(c.streamId, 12) ?: emptyList() }
         epgCache[c.key] = now to items
         return items
     }

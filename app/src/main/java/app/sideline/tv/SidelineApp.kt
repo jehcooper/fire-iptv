@@ -16,6 +16,7 @@ import coil.memory.MemoryCache
 class SidelineApp : Application(), ImageLoaderFactory {
     override fun onCreate() {
         super.onCreate()
+        ctx = applicationContext
         Net.cacheDir = filesDir.resolve("xtream")
         prefs = Prefs(this)
         app.sideline.tv.ui.Themes.set(prefs.theme.value)
@@ -29,6 +30,7 @@ class SidelineApp : Application(), ImageLoaderFactory {
         if (prefs.accounts.value.isNotEmpty()) repo.refresh()
         scores.start()
         app.sideline.tv.data.Discover.startWarming(repo)
+        app.sideline.tv.data.Trakt.start()
 
         // Track whether any of our screens is showing, so score polling pauses when the app is in the background.
         registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
@@ -57,6 +59,7 @@ class SidelineApp : Application(), ImageLoaderFactory {
         .build()
 
     companion object {
+        lateinit var ctx: android.content.Context
         lateinit var prefs: Prefs
         lateinit var repo: Repository
         lateinit var scores: ScoreWatcher

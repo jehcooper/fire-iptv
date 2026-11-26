@@ -56,6 +56,8 @@ class Prefs(context: Context) {
     // ---- Channel edits ----
     /** Called after a rename/hide so the channel list can refresh. */
     var onChannelEdit: (() -> Unit)? = null
+    /** Called after you add/remove a watchlist title, so Trakt can follow. */
+    var onWatchlistEdit: (() -> Unit)? = null
 
     private val _hiddenChannels = MutableStateFlow(sp.getStringSet("hiddenChannels", emptySet())!!.toSet())
     val hiddenChannels: StateFlow<Set<String>> = _hiddenChannels
@@ -142,10 +144,15 @@ class Prefs(context: Context) {
     /** Your watchlist: "vod:<acc:id>" for movies, "series:<acc:seriesId>" for series (newest first). */
     private val _watchlist = MutableStateFlow((sp.getString("watchlist", "") ?: "").split(',').filter { it.isNotBlank() })
     val watchlist: StateFlow<List<String>> = _watchlist
+    fun setWatchlist(l: List<String>) {
+        _watchlist.value = l.distinct()
+        sp.edit().putString("watchlist", _watchlist.value.joinToString(",")).apply()
+    }
     fun toggleWatchlist(key: String) {
         val l = if (key in _watchlist.value) _watchlist.value - key else listOf(key) + _watchlist.value
         _watchlist.value = l
         sp.edit().putString("watchlist", l.joinToString(",")).apply()
+        onWatchlistEdit?.invoke()
     }
     private val _sorts = MutableStateFlow(mapOf("vod" to (sp.getString("sort_vod", "provider") ?: "provider"),
         "series" to (sp.getString("sort_series", "provider") ?: "provider")))
@@ -286,6 +293,43 @@ class Prefs(context: Context) {
     private val _traktSync = MutableStateFlow(sp.getStringSet("traktSync", emptySet())!!.toSet())
     val traktSync: StateFlow<Set<String>> = _traktSync
     fun toggleTraktSync(key: String) = toggle(_traktSync, "traktSync", key)
+    /** Sync every title automatically (default), except the ones in [traktExclude]. */
+    private val _traktSyncAll = MutableStateFlow(sp.getBoolean("traktSyncAll", true))
+    val traktSyncAll: StateFlow<Boolean> = _traktSyncAll
+    fun setTraktSyncAll(v: Boolean) { _traktSyncAll.value = v; sp.edit().putBoolean("traktSyncAll", v).apply() }
+    private val _traktExclude = MutableStateFlow(sp.getStringSet("traktExclude", emptySet())!!.toSet())
+    val traktExclude: StateFlow<Set<String>> = _traktExclude
+    fun toggleTraktExclude(key: String) = toggle(_traktExclude, "traktExclude", key)
+    /** Watchlist sync bookkeeping: what both sides looked like after the last sync. */
+    var wlLastTrakt: Set<String>
+        get() = sp.getStringSet("wlLastTrakt", null)?.toSet() ?: emptySet()
+        set(v) { sp.edit().putStringSet("wlLastTrakt", v).apply() }
+    var wlLastLocal: Set<String>
+        get() = sp.getStringSet("wlLastLocal", null)?.toSet() ?: emptySet()
+        set(v) { sp.edit().putStringSet("wlLastLocal", v).apply() }
+    var wlSyncedOnce: Boolean
+        get() = sp.getBoolean("wlSyncedOnce", false)
+        set(v) { sp.edit().putBoolean("wlSyncedOnce", v).apply() }
+    /** Trakt sign-in host that answered last ("https://api.trakt.tv" or "https://auth.trakt.tv"). */
+    var traktAuthHost: String
+        get() = sp.getString("traktAuthHost", "https://api.trakt.tv") ?: "https://api.trakt.tv"
+        set(v) { sp.edit().putString("traktAuthHost", v).apply() }
+    /** NHL video player key, learned from NHL.com: "accountId|policyKey". */
+    var bcovKey: String
+        get() = sp.getString("bcovKey", "") ?: ""
+        set(v) { sp.edit().putString("bcovKey", v).apply() }
+
+    /** Per-channel guide choice: channel key → guide (XMLTV) channel id, or "-" for no guide. */
+    private val _guideOverrides = MutableStateFlow(loadMap("guideOverrides"))
+    val guideOverrides: StateFlow<Map<String, String>> = _guideOverrides
+    fun setGuideOverride(channelKey: String, epgId: String?) {
+        val m = _guideOverrides.value.toMutableMap()
+        if (epgId == null) m.remove(channelKey) else m[channelKey] = epgId
+        _guideOverrides.value = m
+        sp.edit().putString("guideOverrides", json.encodeToString(kotlinx.serialization.builtins.MapSerializer(
+            String.serializer(), String.serializer()), m)).apply()
+        onChannelEdit?.invoke()
+    }
 
     /** Your library items matched to TMDB: "movie:<acc:id>" / "series:<acc:id>" → TMDB id. */
     private val _tmdbIds = MutableStateFlow(loadMap("tmdbIds"))

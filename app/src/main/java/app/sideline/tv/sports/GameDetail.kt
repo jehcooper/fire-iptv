@@ -28,10 +28,34 @@ data class GameDetail(
     val clipWord: String = "Goals",
 )
 
-/** One goal/score you can watch: the NHL's own clip page when there is one, otherwise a YouTube search. */
-data class Clip(val line: String, val url: String?, val query: String, val words: List<String>)
+/**
+ * One goal/score you can watch. Tried in order: the NHL's own clip played directly ([nhlId]/[url]),
+ * an ESPN highlight video file ([direct]), then a YouTube search ([query]).
+ */
+data class Clip(val line: String, val url: String?, val query: String, val words: List<String>,
+                val nhlId: String? = null, val direct: String? = null)
 
 object GameDetails {
+    /** ESPN's highlight videos for a game: (headline + description, best video link). */
+    private fun espnVideos(root: JsonObject?): List<Pair<String, String>> =
+        root?.get("videos").arr()?.mapNotNull { it.obj() }?.mapNotNull { v ->
+            val links = v["links"].obj()
+            val src = links?.get("source").obj()
+            val url = src?.get("HLS").obj()?.get("HD").obj()?.s("href") ?: src?.get("HLS").obj()?.s("href")
+                ?: src?.get("HD").obj()?.s("href") ?: src?.s("href")
+                ?: links?.get("mobile").obj()?.get("source").obj()?.s("href")
+            val text = listOfNotNull(v.s("headline"), v.s("description"), v.s("caption")).joinToString(" ")
+            if (url != null && url.startsWith("http")) text to url else null
+        }.orEmpty()
+
+    /** The ESPN video whose headline names the scorer. */
+    private fun videoFor(videos: List<Pair<String, String>>, words: List<String>): String? {
+        val w = words.filter { it.length > 2 }
+        if (w.isEmpty()) return null
+        return videos.firstOrNull { (t, _) -> w.all { t.contains(it, ignoreCase = true) } }?.second
+            ?: videos.firstOrNull { (t, _) -> t.contains(w.last(), ignoreCase = true) }?.second
+    }
+
     suspend fun load(g: Game): GameDetail? {
         val l = Leagues.byId(g.leagueId) ?: return null
         return try {
@@ -123,6 +147,10 @@ object GameDetails {
         val periods = plays.mapNotNull { it["periodDescriptor"].obj() }.distinctBy { it.s("number") }
             .filter { it.s("periodType") != "SO" }
 
+        // ESPN's highlight videos for the same game (a fallback when the NHL clip can't be played).
+        val espnVids = try {
+            espnVideos(Net.getJson("https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/summary?event=${g.id}").obj())
+        } catch (e: Exception) { emptyList() }
         // Each goal's NHL video (when the league has posted it) and a YouTube search as a fallback.
         val dateText = java.text.SimpleDateFormat("MMM d yyyy", java.util.Locale.US).format(java.util.Date(if (g.startMillis > 0) g.startMillis else System.currentTimeMillis()))
         val clipsByPeriod = periods.map { pd ->
@@ -132,10 +160,12 @@ object GameDetails {
                 val scorerFull = d?.s("scoringPlayerId")?.let { names[it] } ?: "Goal"
                 val last = scorerFull.substringAfter(". ")
                 val team = abbr(d?.s("eventOwnerTeamId"))
+                val nhlId = d?.s("highlightClip")
                 val url = d?.s("highlightClipSharingUrl")?.takeIf { it.startsWith("http") }
-                    ?: d?.s("highlightClip")?.let { "https://www.nhl.com/video/$it" }
+                    ?: nhlId?.let { "https://www.nhl.com/video/$it" }
                 Clip("$team · $scorerFull · ${p.s("timeInPeriod") ?: ""}", url,
-                    "$last goal ${g.away?.shortName ?: ""} vs ${g.home?.shortName ?: ""} $dateText", listOf(last))
+                    "$last goal ${g.away?.shortName ?: ""} vs ${g.home?.shortName ?: ""} $dateText", listOf(last),
+                    nhlId = nhlId, direct = videoFor(espnVids, listOf(last)))
             }
         }.filter { it.second.isNotEmpty() }
 
@@ -226,6 +256,7 @@ object GameDetails {
     private suspend fun scoring(l: League, g: Game): GameDetail {
         val root = Net.getJson("https://site.api.espn.com/apis/site/v2/sports/${l.path}/summary?event=${g.id}").obj() ?: return GameDetail()
         val soccer = l.path.startsWith("soccer")
+        val espnVids = espnVideos(root)
         val plays = root["scoringPlays"].arr()?.mapNotNull { it.obj() }
             ?: root["keyEvents"].arr()?.mapNotNull { it.obj() }?.filter { (it["type"].obj()?.s("type") ?: "").contains("goal", true) }
             ?: emptyList()
@@ -245,7 +276,7 @@ object GameDetails {
             val type = p["scoringType"].obj()?.s("displayName") ?: p["type"].obj()?.s("text") ?: if (soccer) "Goal" else ""
             val line = listOf(team, if (soccer) (who.ifBlank { "Goal" }) else (if (type.isNotBlank()) "$type: " else "") + who, clock).filter { it.isNotBlank() }.joinToString(" · ")
             val surname = who.split(" ").filter { it.length > 2 && it.first().isUpperCase() }.let { if (soccer) it.takeLast(1) else it.take(2) }
-            n to Clip(line, null, if (soccer) "$who goal $vs" else "$who $vs highlights", surname)
+            n to Clip(line, null, if (soccer) "$who goal $vs" else "$who $vs highlights", surname, direct = videoFor(espnVids, surname))
         }
         val grouped = clips.groupBy { it.first }.toSortedMap().map { (n, l2) -> periodName(n) to l2.map { it.second } }
         return GameDetail(clips = grouped, clipWord = if (soccer) "Goals" else "Scoring")

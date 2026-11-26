@@ -481,6 +481,35 @@ fun SearchDialog(
 }
 
 /** "Starting now" pop-up for TV-guide reminders, with Watch now. (The player has its own version.) */
+/** Pop-up when a new episode of a show you follow (on Trakt) has reached your library. */
+@Composable
+fun NewEpisodeHost() {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val list by app.sideline.tv.data.Trakt.newEpisodes.collectAsState()
+    val cur = list.firstOrNull() ?: return
+    val play = remember(cur) { FocusRequester() }
+    fun next() { app.sideline.tv.data.Trakt.dismissNewEpisodes() }
+    LaunchedEffect(cur) { delay(200); try { play.requestFocus() } catch (_: Exception) {} }
+    TvDialog({ next() }) {
+        Box(Modifier.fillMaxSize().padding(36.dp), contentAlignment = Alignment.TopEnd) {
+            Column(Modifier.width(500.dp).clip(RoundedCornerShape(16.dp)).background(C.Surface).border(2.dp, C.Accent, RoundedCornerShape(16.dp)).padding(20.dp)) {
+                Text("🔔 New episode in your library", color = C.Accent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                Text(app.sideline.tv.data.MovieInfoService.cleanTitle(cur.series.name).first, color = C.Text, fontSize = 20.sp,
+                    fontWeight = FontWeight.SemiBold, maxLines = 2, modifier = Modifier.padding(top = 4.dp))
+                Text("S${cur.episode.season} E${cur.episode.number} · ${cur.episode.title}", color = C.Muted, fontSize = 14.sp, maxLines = 2)
+                if (list.size > 1) Text("+ ${list.size - 1} more new " + if (list.size == 2) "episode" else "episodes",
+                    color = C.Faint, fontSize = 13.sp, modifier = Modifier.padding(top = 2.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 14.dp)) {
+                    Chip("▶ Play now", true, modifier = Modifier.focusRequester(play), onClick = {
+                        next(); app.sideline.tv.player.Play.episode(ctx, cur.episode, cur.series.name, cur.series.seriesId, cur.series.cover)
+                    })
+                    Chip("Later", false, onClick = { next() })
+                }
+            }
+        }
+    }
+}
+
 @Composable
 fun ReminderHost() {
     val ctx = androidx.compose.ui.platform.LocalContext.current

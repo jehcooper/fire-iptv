@@ -34,6 +34,9 @@ data class AccountStatus(
 
 data class Category(val accountId: String, val id: String, val name: String)
 
+/** Guide id meaning "no guide for this channel" (your choice). */
+const val NO_GUIDE = "-none-"
+
 data class Channel(
     val accountId: String,
     val streamId: Int,

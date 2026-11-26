@@ -220,6 +220,8 @@ fun LiveScreen() {
                         }
                         if (next != null) Text("Next ${timeOf(next.start * 1000)}  ${next.title}", color = C.Muted, fontSize = 12.sp, maxLines = 1)
                         if (now == null) Text("No guide info for this channel", color = C.Faint, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+                        if (app.sideline.tv.data.FullGuide.mismatch(c)) Text("⚠ This guide may belong to another channel (${app.sideline.tv.data.FullGuide.displayName(c.epgId) ?: c.epgId}). ≡ → Choose guide",
+                            color = C.Gold, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp))
                     }
                 }
             }
